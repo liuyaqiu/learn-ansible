@@ -1,0 +1,86 @@
+---
+- name: Cleanup KVM VM and associated files
+  hosts: localhost
+  connection: local
+  become: yes
+
+  vars:
+    vm_name: hello-vm # Must match the vm_name used in the creation playbook
+    image_dir: /var/lib/libvirt/images
+
+    # VM's actual writable disk (overlay)
+    vm_disk_path: "{{ image_dir }}/{{ vm_name }}.qcow2"
+
+    # Cloud-init seed image and data files
+    network_config_path: "{{ image_dir }}/{{ vm_name }}-network-config"
+    seed_img_path: "{{ image_dir }}/{{ vm_name }}-seed.img"
+    user_data_path: "{{ image_dir }}/{{ vm_name }}-user-data"
+    meta_data_path: "{{ image_dir }}/{{ vm_name }}-meta-data"
+
+  tasks:
+    - name: Ensure libvirt-python is installed (required for community.libvirt.virt)
+      ansible.builtin.apt:
+        name:
+          - python3-libvirt
+          - python3-lxml
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Ensure VM is stopped/destroyed if running
+      community.libvirt.virt:
+        name: "{{ vm_name }}"
+        state: destroyed # This will power off and destroy it if running
+      register: vm_destroy_result
+      ignore_errors: true # Continue even if VM is already stopped or doesn't exist
+
+    - name: Undefine the VM if it exists
+      community.libvirt.virt:
+        name: "{{ vm_name }}"
+        command: undefine # This removes the VM's definition from libvirt
+      register: vm_undefine_result
+      ignore_errors: true # Continue even if VM is already undefined (no definition to remove)
+
+    - name: Report VM deletion status
+      ansible.builtin.debug:
+        msg: |
+          VM '{{ vm_name }}' destroy result: {{ vm_destroy_result }}
+          VM '{{ vm_name }}' undefine result: {{ vm_undefine_result }}
+      when: vm_destroy_result is defined or vm_undefine_result is defined
+
+    - name: Remove VM's QCOW2 overlay disk file
+      ansible.builtin.file:
+        path: "{{ vm_disk_path }}"
+        state: absent
+      ignore_errors: true # Continue even if file doesn't exist
+
+    - name: Remove network configuration file
+      ansible.builtin.file:
+        path: "{{ network_config_path }}"
+        state: absent
+      ignore_errors: true
+
+    - name: Remove cloud-init seed.img file
+      ansible.builtin.file:
+        path: "{{ seed_img_path }}"
+        state: absent
+      ignore_errors: true
+
+    - name: Remove cloud-init user-data file
+      ansible.builtin.file:
+        path: "{{ user_data_path }}"
+        state: absent
+      ignore_errors: true
+
+    - name: Remove cloud-init meta-data file
+      ansible.builtin.file:
+        path: "{{ meta_data_path }}"
+        state: absent
+      ignore_errors: true
+
+    - name: Print cleanup completion message
+      ansible.builtin.debug:
+        msg: |
+          Cleanup complete for VM '{{ vm_name }}'.
+          The base cloud image ({{ image_dir }}/jammy-server-cloudimg-amd64.img)
+          was NOT deleted and can be reused.

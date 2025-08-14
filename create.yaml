@@ -1,0 +1,231 @@
+---
+- name: Setup KVM host and create a cloud VM
+  hosts: localhost
+  connection: local # Ensure playbook runs on the control node
+  become: yes       # Run tasks with sudo/root privileges
+
+  vars:
+    vm_name: hello-vm
+    vm_memory: 2048       # MB
+    vm_vcpus: 1
+    vm_disk_size: 20       # GB for the overlay disk
+    image_dir: /var/lib/libvirt/images # Standard location for libvirt images
+
+    # Static IP configuration
+    vm_static_ip: 192.168.122.100  # Static IP for the VM
+    vm_netmask: 255.255.255.0      # Netmask
+    vm_gateway: 192.168.122.1      # Gateway (default network)
+    vm_dns: 8.8.8.8                # DNS server
+
+    # Base cloud image details
+    cloud_img_url: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+    cloud_img_base_name: noble-server-cloudimg-amd64.img
+    cloud_img_path: "{{ image_dir }}/{{ cloud_img_base_name }}"
+
+    # VM's actual writable disk (overlay)
+    vm_disk_path: "{{ image_dir }}/{{ vm_name }}.qcow2"
+
+    # Cloud-init seed image and data files
+    seed_img_path: "{{ image_dir }}/{{ vm_name }}-seed.img"
+    network_config_path: "{{ image_dir }}/{{ vm_name }}-network-config"
+    user_data_path: "{{ image_dir }}/{{ vm_name }}-user-data"
+    meta_data_path: "{{ image_dir }}/{{ vm_name }}-meta-data"
+
+    # SSH Public Key for cloud-init (ensures your user can SSH)
+    # Assumes id_rsa.pub exists in your home directory's .ssh folder
+    ssh_pub_key: "{{ lookup('file', '/home/liuyaqiu/.ssh/precision.pub') }}"
+
+  tasks:
+
+    - name: Install KVM/libvirt and cloud-utils dependencies
+      ansible.builtin.apt:
+        name:
+          - qemu-kvm
+          - libvirt-daemon-system
+          - libvirt-clients
+          - virtinst
+          - cloud-image-utils
+          - wget
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    # Add tasks for other OS families if needed, e.g., for RedHat/CentOS:
+    # - name: Install KVM/libvirt and cloud-utils dependencies (RedHat/CentOS)
+    #   ansible.builtin.yum:
+    #     name:
+    #       - qemu-kvm
+    #       - libvirt
+    #       - virt-install
+    #       - cloud-utils-growpart
+    #       - cloud-utils
+    #       - wget
+    #     state: present
+    #   when: ansible_os_family == "RedHat"
+
+
+    - name: Ensure libvirtd service is running and enabled
+      ansible.builtin.service:
+        name: libvirtd
+        state: started
+        enabled: yes
+
+    - name: Add current user to libvirt group
+      ansible.builtin.user:
+        name: "{{ ansible_user_id }}"
+        groups: libvirt
+        append: yes
+      # Use `shell` with `id -Gn` to check current groups to make task idempotent
+      # if the user is already in the group without relying on 'changed'
+      changed_when: false # User module might always report changed even if not
+      failed_when: false # Allow it to fail if user doesn't exist (unlikely for current user)
+
+    - name: Download Ubuntu cloud image if not present
+      ansible.builtin.get_url:
+        url: "{{ cloud_img_url }}"
+        dest: "{{ cloud_img_path }}"
+        mode: '0644' # Ensure libvirt/qemu can read it
+        force: no    # Do not download again if already present
+      register: download_status
+      # Verify permissions after download or if file existed
+    - name: Ensure cloud image has correct permissions
+      ansible.builtin.file:
+        path: "{{ cloud_img_path }}"
+        owner: root # Typically owned by root
+        group: root # Typically owned by root
+        mode: '0644' # Readable by others, not writable
+
+    - name: Create qcow2 overlay disk for the VM
+      ansible.builtin.command: >
+        qemu-img create
+        -f qcow2
+        -F qcow2
+        -b {{ cloud_img_path }}
+        {{ vm_disk_path }}
+        {{ vm_disk_size }}G
+      args:
+        creates: "{{ vm_disk_path }}" # Only run if the overlay disk doesn't exist
+      # Ensure overlay disk has correct permissions for libvirt
+    - name: Ensure overlay disk has correct permissions
+      ansible.builtin.file:
+        path: "{{ vm_disk_path }}"
+        owner: libvirt-qemu # Or libvirt-qemu depending on your distro
+        group: kvm # Or kvm depending on your distro
+        mode: '0640' # Readable/writable by owner, readable by group, not by others
+
+    - name: Remove existing cloud-init files to force regeneration
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ user_data_path }}"
+        - "{{ meta_data_path }}"
+        - "{{ seed_img_path }}"
+
+    - name: Write cloud-init user-data file
+      ansible.builtin.copy:
+        dest: "{{ user_data_path }}"
+        content: |
+          #cloud-config
+          users:
+            - name: ubuntu
+              sudo: ALL=(ALL) NOPASSWD:ALL
+              shell: /bin/bash
+              ssh-authorized-keys:
+                - {{ ssh_pub_key }}
+          chpasswd:
+            list: |
+              ubuntu:ubuntu
+            expire: False
+          ssh_pwauth: True
+          
+          # Install additional packages
+          packages:
+            - net-tools
+            - iputils-ping
+            - curl
+            - wget
+            - git
+            - vim
+        mode: '0644' # Readable by others for cloud-localds
+
+    - name: Write network configuration file
+      ansible.builtin.copy:
+        dest: "{{ network_config_path }}"
+        content: |
+          network:
+            version: 2
+            ethernets:
+              enp1s0:
+                dhcp4: false
+                dhcp6: false
+                addresses:
+                  - {{ vm_static_ip }}/24
+                routes:
+                  - to: default
+                    via: {{ vm_gateway }}
+                nameservers:
+                  addresses: [{{ vm_dns }}]
+
+    - name: Write cloud-init meta-data file
+      ansible.builtin.copy:
+        dest: "{{ meta_data_path }}"
+        content: |
+          instance-id: {{ vm_name }}
+          local-hostname: {{ vm_name }}
+        mode: '0644' # Readable by others for cloud-localds
+
+    - name: Generate seed.img (cloud-init ISO) from user-data and meta-data
+      ansible.builtin.command: >
+        cloud-localds -N {{ network_config_path }} {{ seed_img_path }} {{ user_data_path }} {{ meta_data_path }}
+      args:
+        creates: "{{ seed_img_path }}" # Only run if the seed image doesn't exist
+      # Ensure seed image has correct permissions for libvirt
+    - name: Ensure seed image has correct permissions
+      ansible.builtin.file:
+        path: "{{ seed_img_path }}"
+        owner: libvirt-qemu # Or libvirt-qemu
+        group: kvm # Or kvm
+        mode: '0640' # Readable/writable by owner, readable by group, not by others
+
+    - name: Create the KVM virtual machine using virt-install
+      ansible.builtin.command: >
+        virt-install
+        --name {{ vm_name }}
+        --memory {{ vm_memory }}
+        --vcpus {{ vm_vcpus }}
+        --disk path={{ vm_disk_path }},format=qcow2,cache=none,bus=virtio
+        --disk path={{ seed_img_path }},device=cdrom,bus=sata
+        --os-type linux --os-variant ubuntu24.04
+        --import
+        --network bridge=virbr0,model=virtio
+        --noautoconsole
+        --wait 0
+      register: virt_install_result
+     # This command can be verbose, capture output for debugging if needed
+
+    - name: Print VM creation status
+      ansible.builtin.debug:
+        msg: |
+          VM '{{ vm_name }}' creation command executed.
+          Please wait a moment for the VM to boot and acquire an IP address.
+          You can check VM status with: virsh list --all
+          To get the IP address: virsh domifaddr {{ vm_name }}
+          To connect to the console: virsh console {{ vm_name }}
+          Default user: ubuntu
+          Default password: ubuntu (if chpasswd was enabled in user-data)
+          SSH with your key: ssh ubuntu@{{ vm_static_ip }}
+
+    - name: Wait for VM to boot and show debugging info
+      ansible.builtin.pause:
+        seconds: 30
+        prompt: |
+          VM is booting. After 30 seconds, you can:
+          1. Check VM status: virsh list --all
+          2. Check network interface: virsh domifaddr {{ vm_name }}
+          3. Connect to console: virsh console {{ vm_name }}
+          4. If static IP doesn't work, try these commands inside the VM:
+             - ip addr show
+             - cat /etc/netplan/50-cloud-init.yaml
+             - sudo netplan apply
+             - sudo systemctl restart systemd-networkd

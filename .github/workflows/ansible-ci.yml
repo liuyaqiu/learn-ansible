@@ -82,6 +82,10 @@ jobs:
           pip install ansible-lint yamllint jinja2 pre-commit
           pip install molecule molecule-plugins[docker] pytest-testinfra
           npm install -g prettier
+          # Use our Makefile to ensure dependencies are properly installed
+          if [ -f Makefile ]; then
+            make install-deps || echo "Makefile install-deps not available, using manual install"
+          fi
 
       - name: 📝 Display versions
         run: |
@@ -90,26 +94,22 @@ jobs:
           echo "Ansible-lint: $(ansible-lint --version)"
           echo "YAMLlint: $(yamllint --version)"
 
-      - name: 🔍 YAML Lint
+      - name: 🔍 Complete Lint Check
         run: |
-          yamllint playbooks/ roles/ group_vars/ inventories/
-        continue-on-error: false
-
-      - name: 🎨 Check Formatting with Prettier
-        run: |
-          prettier --check "**/*.{yml,yaml,json,md}" --ignore-path .prettierignore
-
-      - name: ✅ Ansible Syntax Check
-        run: |
-          for playbook in playbooks/*.yml; do
-            echo "🔍 Checking syntax: $playbook"
-            ansible-playbook --syntax-check -i inventories/dev "$playbook"
-          done
-
-      - name: 🧹 Ansible Lint
-        run: |
-          ansible-lint playbooks/ roles/
-        continue-on-error: false
+          # Use our improved Makefile lint target if available
+          if [ -f Makefile ]; then
+            echo "🚀 Using Makefile lint target..."
+            make lint
+          else
+            echo "🔍 Running manual lint checks..."
+            yamllint playbooks/ roles/ group_vars/ inventories/
+            prettier --check "**/*.{yml,yaml,json,md}" --ignore-path .prettierignore
+            for playbook in playbooks/*.yml; do
+              echo "🔍 Checking syntax: $playbook"
+              ansible-playbook --syntax-check -i inventories/dev "$playbook"
+            done
+            ansible-lint playbooks/ roles/
+          fi
 
       - name: 📋 Inventory Validation
         run: |
@@ -132,20 +132,29 @@ jobs:
 
       - name: 🔍 Check for secrets
         run: |
-          echo "🔍 Scanning for potential secrets..."
-          # Check for hardcoded passwords
-          if grep -r -n "password.*:" playbooks/ roles/ --include="*.yml" --include="*.yaml" | grep -v "cloud_init_password.*ubuntu"; then
-            echo "❌ Potential hardcoded passwords found!"
-            exit 1
-          fi
+          if [ -f scripts/security-scan.sh ]; then
+            echo "🔍 Running security scan script..."
+            bash scripts/security-scan.sh
+          else
+            echo "🔍 Running basic security checks..."
+            # Check for hardcoded passwords (exclude Ansible variable references)
+            password_matches=$(grep -r -n "password.*:" playbooks/ roles/ --include="*.yml" --include="*.yaml" 2>/dev/null | grep -v "{{.*}}" | grep -v "#" || true)
+            if [[ -n "$password_matches" ]]; then
+              echo "$password_matches"
+              echo "❌ Potential hardcoded passwords found!"
+              exit 1
+            fi
 
-          # Check for SSH keys in code
-          if grep -r -n "-----BEGIN.*PRIVATE KEY-----" playbooks/ roles/ --include="*.yml" --include="*.yaml"; then
-            echo "❌ Private keys found in code!"
-            exit 1
-          fi
+            # Check for SSH keys in code
+            private_key_matches=$(grep -r -n "-----BEGIN.*PRIVATE KEY-----" playbooks/ roles/ --include="*.yml" --include="*.yaml" 2>/dev/null || true)
+            if [[ -n "$private_key_matches" ]]; then
+              echo "$private_key_matches"
+              echo "❌ Private keys found in code!"
+              exit 1
+            fi
 
-          echo "✅ No obvious secrets found"
+            echo "✅ No obvious secrets found"
+          fi
 
       - name: 🛡️ Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master

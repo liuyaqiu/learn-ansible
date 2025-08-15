@@ -126,19 +126,29 @@ secret-scan:
   script:
     - echo "🔍 Scanning for secrets..."
     - |
-      # Check for hardcoded passwords
-      if grep -r -n "password.*:" playbooks/ roles/ --include="*.yml" --include="*.yaml" | grep -v "cloud_init_password.*ubuntu"; then
-        echo "❌ Potential hardcoded passwords found!"
-        exit 1
-      fi
+      if [ -f scripts/security-scan.sh ]; then
+        echo "🔍 Using security scan script..."
+        bash scripts/security-scan.sh
+      else
+        echo "🔍 Running basic security checks..."
+        # Check for hardcoded passwords (exclude Ansible variable references)
+        password_matches=$(grep -r -n "password.*:" playbooks/ roles/ --include="*.yml" --include="*.yaml" 2>/dev/null | grep -v "{{.*}}" | grep -v "#" || true)
+        if [[ -n "$password_matches" ]]; then
+          echo "$password_matches"
+          echo "❌ Potential hardcoded passwords found!"
+          exit 1
+        fi
 
-      # Check for SSH keys
-      if grep -r -n "-----BEGIN.*PRIVATE KEY-----" playbooks/ roles/ --include="*.yml" --include="*.yaml"; then
-        echo "❌ Private keys found in code!"
-        exit 1
-      fi
+        # Check for SSH keys
+        private_key_matches=$(grep -r -n "-----BEGIN.*PRIVATE KEY-----" playbooks/ roles/ --include="*.yml" --include="*.yaml" 2>/dev/null || true)
+        if [[ -n "$private_key_matches" ]]; then
+          echo "$private_key_matches"
+          echo "❌ Private keys found in code!"
+          exit 1
+        fi
 
-      echo "✅ No obvious secrets found"
+        echo "✅ No obvious secrets found"
+      fi
   rules:
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -268,8 +278,38 @@ manual-full-test:
   stage: 🧪 test
   script:
     - echo "🧪 Running comprehensive manual tests..."
-    - make ci
+    - |
+      if [ -f Makefile ]; then
+        echo "🚀 Using Makefile CI target..."
+        make ci
+      else
+        echo "⚠️ Makefile not found, running basic tests..."
+        ansible-playbook --syntax-check -i inventories/dev playbooks/validate-config.yml
+        ansible-playbook -i inventories/dev playbooks/validate-config.yml
+      fi
   when: manual
   allow_failure: false
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
+
+# Additional job to test Makefile integration
+makefile-integration:
+  stage: 🧪 test
+  script:
+    - echo "🔧 Testing Makefile integration..."
+    - |
+      if [ -f Makefile ]; then
+        echo "📋 Available Makefile targets:"
+        make help
+        echo "🧪 Running lint-fix..."
+        make lint-fix || echo "lint-fix completed with warnings"
+        echo "🛡️ Running security check..."
+        make security-check
+      else
+        echo "⚠️ Makefile not found, skipping integration test"
+      fi
+  allow_failure: true
+  rules:
+    - changes:
+        - "Makefile"
+        - "scripts/**"

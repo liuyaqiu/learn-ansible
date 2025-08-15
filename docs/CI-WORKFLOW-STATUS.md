@@ -291,6 +291,113 @@ permissions:
 offline: true  # Skip dependency resolution
 ```
 
+#### **Issue**: `SSH public key file not found or not accessible` in CI
+
+- **Cause**: CI environments don't have user SSH keys that exist locally
+- **Solution**: Dynamic SSH key generation and configuration updates
+
+```yaml
+# ✅ FIXED with Makefile targets
+make prepare-ci-artifacts  # Generate keys and update config
+make ci                   # Run with generated keys
+make ci-clean            # Run and clean up afterward
+
+# ✅ FIXED in GitHub Actions
+- name: Prepare CI artifacts (SSH keys)
+  run: |
+    make prepare-ci-artifacts
+    ls -la ci-artifacts/  # Shows generated keys
+
+- name: Upload CI artifacts
+  uses: actions/upload-artifact@v4
+  with:
+    name: ci-artifacts-${{ matrix.python-version }}
+    path: ci-artifacts/
+```
+
+#### **Issue**: `The artifact name is not valid: ci-artifacts-3.10->=6.0.0,<7.0.0. Contains the following character: Less than <`
+
+- **Cause**: GitHub Actions matrix variables containing version ranges (`>=6.0.0,<7.0.0`) include invalid characters for artifact names
+- **Solution**: Sanitize artifact names by replacing problematic characters
+
+```yaml
+# ✅ FIXED with artifact name sanitization
+- name: Generate artifact name
+  id: artifact-name
+  run: |
+    # Sanitize ansible version for artifact name
+    ANSIBLE_CLEAN=$(echo "${{ matrix.ansible-version }}" | sed 's/[<>,:=]/-/g' | sed 's/--/-/g')
+    ARTIFACT_NAME="ci-artifacts-py${{ matrix.python-version }}-ansible${ANSIBLE_CLEAN}"
+    echo "name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+
+- name: Upload CI artifacts
+  uses: actions/upload-artifact@v4
+  with:
+    name: ${{ steps.artifact-name.outputs.name }} # Clean name: ci-artifacts-py3.10-ansible-6.0.0-7.0.0
+```
+
+#### **Issue**: `⚠️ prettier not found (run 'make install-deps')` in CI
+
+- **Cause**: GitHub Actions was calling `make lint` before `prettier` was properly installed by `make install-deps`
+- **Solution**: Install prettier in CI before calling Makefile targets, and improve Makefile resilience
+
+```yaml
+# ✅ FIXED in GitHub Actions
+- name: Install dependencies
+  run: |
+    python -m pip install --upgrade pip
+    pip install "ansible${{ matrix.ansible-version }}"
+    # Install prettier globally for CI
+    sudo npm install -g prettier
+    # Use Makefile for remaining dependencies
+    make install-deps
+
+# ✅ FIXED in Makefile - CI-friendly dependency installation
+install-deps: ## Install development dependencies
+  @if command -v pip3 >/dev/null 2>&1; then \
+    pip3 install --user ansible-lint yamllint pre-commit || pip install ansible-lint yamllint pre-commit; \
+  else \
+    pip install ansible-lint yamllint pre-commit; \
+  fi
+  @if command -v npm >/dev/null 2>&1; then \
+    npm install -g prettier 2>/dev/null || echo "Could not install prettier globally"; \
+  fi
+```
+
+#### **Issue**: Dependency management duplicated between Makefile and CI workflows
+
+- **Cause**: CI workflows were manually installing dependencies (pip, npm packages) duplicating Makefile logic
+- **Solution**: Centralize ALL dependency management in Makefile, CI only calls make targets
+
+```yaml
+# ❌ BEFORE: Duplicated dependency installation
+- name: Install dependencies
+  run: |
+    python -m pip install --upgrade pip
+    pip install "ansible${{ matrix.ansible-version }}"
+    pip install molecule pytest-testinfra
+    sudo npm install -g prettier
+    make install-deps  # Additional duplication!
+
+# ✅ AFTER: Centralized via Makefile
+- name: Install all dependencies via Makefile
+  run: make install-ci-deps
+  env:
+    ANSIBLE_VERSION: ${{ matrix.ansible-version }}
+
+# ✅ Makefile handles everything
+install-ci-deps: ## Install all dependencies for CI environment
+  @$(MAKE) install-deps
+
+install-deps: ## Install development dependencies
+  @if [ -n "$(ANSIBLE_VERSION)" ]; then \
+    pip install "ansible$(ANSIBLE_VERSION)"; \
+  fi
+  @pip install ansible-lint yamllint pre-commit molecule pytest-testinfra
+  @npm install -g prettier || npm install prettier
+  @ansible-galaxy collection install -r requirements.yml
+```
+
 ### **✅ Recent Fixes Applied**
 
 - **Schema validation**: Fixed Ubuntu platform versions in meta files
@@ -304,6 +411,12 @@ offline: true  # Skip dependency resolution
 - **Logging configuration**: Disabled problematic log paths for CI environments
 - **Ansible-lint offline mode**: Enabled to prevent dependency resolution conflicts
 - **Environment variables**: Added ANSIBLE_LINT_NODEPS=1 for CI compatibility
+- **CI SSH key generation**: Dynamic SSH key pair creation for validation tests
+- **Artifact management**: Automated backup/restore of configurations
+- **CI/local consistency**: Same behavior between `make ci` and GitHub Actions
+- **Artifact name sanitization**: Clean names for matrix builds (invalid chars removed)
+- **Dependency installation**: Completely centralized in Makefile (no CI duplication)
+- **Ansible version matrix**: Supported via ANSIBLE_VERSION environment variable
 
 ---
 

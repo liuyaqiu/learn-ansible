@@ -31,24 +31,18 @@ default:
 
 # Before script for all jobs
 before_script:
-  - apt-get update -qq && apt-get install -y -qq git openssh-client curl
-  - curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-  - apt-get install -y nodejs
-  - pip install --upgrade pip
-  - pip install ansible ansible-lint yamllint pre-commit
-  - npm install -g prettier
+  - echo "🚀 Installing all dependencies (system + development) via Makefile..."
+  - make install-ci-deps
 
 # ============================================================================
 # Lint Stage
 # ============================================================================
-yaml-lint:
+comprehensive-lint:
   stage: 🔍 lint
   script:
-    - echo "🔍 Running YAML lint checks..."
-    - yamllint playbooks/ roles/ group_vars/ inventories/
+    - echo "🚀 Using Makefile for comprehensive linting..."
+    - make lint
   artifacts:
-    reports:
-      junit: yamllint-report.xml
     when: always
     expire_in: 1 week
   rules:
@@ -56,63 +50,18 @@ yaml-lint:
         - "**/*.yml"
         - "**/*.yaml"
         - ".gitlab-ci.yml"
-
-format-check:
-  stage: 🔍 lint
-  script:
-    - echo "🎨 Checking formatting with Prettier..."
-    - prettier --check "**/*.{yml,yaml,json,md}" --ignore-path .prettierignore
-  rules:
-    - changes:
-        - "**/*.yml"
-        - "**/*.yaml"
-        - "scripts/format.sh"
-
-ansible-syntax:
-  stage: 🔍 lint
-  script:
-    - echo "✅ Running Ansible syntax checks..."
-    - |
-      for playbook in playbooks/*.yml; do
-        echo "🔍 Checking syntax: $playbook"
-        ansible-playbook --syntax-check -i inventories/dev "$playbook"
-      done
-  artifacts:
-    when: always
-    expire_in: 1 week
-  rules:
-    - changes:
+        - "Makefile"
         - "playbooks/**"
         - "roles/**"
         - "group_vars/**"
         - "inventories/**"
         - "ansible.cfg"
 
-ansible-lint:
-  stage: 🔍 lint
-  script:
-    - echo "🧹 Running Ansible lint..."
-    - ansible-lint playbooks/ roles/ --format sarif --output-file ansible-lint.sarif
-  artifacts:
-    reports:
-      sast: ansible-lint.sarif
-    when: always
-    expire_in: 1 week
-  allow_failure: true
-  rules:
-    - changes:
-        - "playbooks/**"
-        - "roles/**"
-
 inventory-validation:
   stage: 🔍 lint
   script:
-    - echo "📋 Validating inventories..."
-    - |
-      for env in dev prod staging; do
-        echo "🔍 Validating $env inventory..."
-        ansible-inventory -i inventories/$env --list > /dev/null
-      done
+    - echo "🚀 Using Makefile for inventory validation..."
+    - make inventory-check
   rules:
     - changes:
         - "inventories/**"
@@ -121,66 +70,26 @@ inventory-validation:
 # ============================================================================
 # Security Stage
 # ============================================================================
-secret-scan:
+security-scan:
   stage: 🔒 security
   script:
-    - echo "🔍 Scanning for secrets..."
-    - |
-      if [ -f scripts/security-scan.sh ]; then
-        echo "🔍 Using security scan script..."
-        bash scripts/security-scan.sh
-      else
-        echo "🔍 Running basic security checks..."
-        # Check for hardcoded passwords (exclude Ansible variable references)
-        password_matches=$(grep -r -n "password.*:" playbooks/ roles/ --include="*.yml" --include="*.yaml" 2>/dev/null | grep -v "{{.*}}" | grep -v "#" || true)
-        if [[ -n "$password_matches" ]]; then
-          echo "$password_matches"
-          echo "❌ Potential hardcoded passwords found!"
-          exit 1
-        fi
-
-        # Check for SSH keys
-        private_key_matches=$(grep -r -n "-----BEGIN.*PRIVATE KEY-----" playbooks/ roles/ --include="*.yml" --include="*.yaml" 2>/dev/null || true)
-        if [[ -n "$private_key_matches" ]]; then
-          echo "$private_key_matches"
-          echo "❌ Private keys found in code!"
-          exit 1
-        fi
-
-        echo "✅ No obvious secrets found"
-      fi
+    - echo "🚀 Using Makefile for security scanning..."
+    - make security-check
   rules:
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
-security-scan:
-  stage: 🔒 security
-  image:
-    name: aquasec/trivy:latest
-    entrypoint: [""]
-  script:
-    - trivy fs --format sarif --output trivy-report.sarif .
-  artifacts:
-    reports:
-      sast: trivy-report.sarif
-    when: always
-    expire_in: 1 week
-  allow_failure: true
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-
 # ============================================================================
 # Test Stage
 # ============================================================================
-validation-test:
+functional-test:
   stage: 🧪 test
   before_script:
-    - apt-get update -qq && apt-get install -y -qq git openssh-client python3-libvirt
-    - pip install --upgrade pip
-    - pip install ansible
+    - echo "🚀 Installing all dependencies (system + development) via Makefile..."
+    - make install-ci-deps
   script:
-    - echo "🧪 Running validation tests..."
-    - ansible-playbook -i inventories/dev playbooks/validate-config.yml
+    - echo "🚀 Using Makefile for functional testing..."
+    - make test
   artifacts:
     when: always
     expire_in: 1 week
@@ -190,25 +99,17 @@ validation-test:
         - "roles/**"
         - "group_vars/**"
         - "inventories/**"
-
-check-mode-test:
-  stage: 🧪 test
-  script:
-    - echo "🧪 Testing playbooks in check mode..."
-    - ansible-playbook --check -i inventories/dev playbooks/validate-config.yml
-    - ansible-playbook --check -i inventories/dev playbooks/vm-destroy.yml
-  allow_failure: true
-  rules:
-    - changes:
-        - "playbooks/**"
-        - "roles/**"
+        - "Makefile"
 
 # Parallel testing on different Python versions
 .test-template: &test-template
   stage: 🧪 test
+  before_script:
+    - echo "🚀 Installing all dependencies (system + development) via Makefile..."
+    - make install-ci-deps
   script:
-    - pip install ansible
-    - ansible-playbook --syntax-check -i inventories/dev playbooks/validate-config.yml
+    - echo "🚀 Using Makefile for validation testing..."
+    - make test-validate
   parallel:
     matrix:
       - PYTHON_VERSION: ["3.9", "3.10", "3.11"]

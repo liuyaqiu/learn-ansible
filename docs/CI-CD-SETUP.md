@@ -17,25 +17,44 @@ Our automation setup provides comprehensive validation including:
 
 ### Make Commands
 
+Our project uses **Makefile-driven CI/CD** for consistency between local development and CI environments.
+
 ```bash
 # Install development dependencies
 make install-deps
 
-# Run all checks
+# Prepare CI artifacts (SSH keys for testing)
+make prepare-ci-artifacts
+
+# Run all linting checks
 make lint
 
 # Run syntax checks only
 make syntax
 
-# Run validation tests
+# Run validation tests (with SSH key generation)
 make test
 
 # Run full CI pipeline locally
 make ci
 
-# Get help
+# Run CI pipeline with automatic cleanup
+make ci-clean
+
+# Clean up CI artifacts
+make clean-ci-artifacts
+
+# Get help for all targets
 make help
 ```
+
+### Key Benefits of Make-based CI:
+
+- ✅ **Consistency**: Same commands work in CI and locally
+- 🔄 **No duplication**: CI workflows call `make` targets, not inline scripts
+- 🔑 **SSH key generation**: Automatic SSH key creation for validation tests
+- 🧹 **Automatic cleanup**: Restore original configs after testing
+- 📊 **Comprehensive**: Combines linting, testing, security, formatting
 
 ### Standalone Script
 
@@ -63,11 +82,65 @@ make help
 
 ### Features
 
+- **Makefile-driven**: All CI steps use `make` targets for consistency
+- **Dynamic SSH keys**: Automatic SSH key generation for validation testing
 - **Multi-Python testing** (3.9, 3.10, 3.11)
 - **Multi-Ansible testing** (6.x, 7.x)
 - **Security scanning** with Trivy
-- **Artifact collection** for reports
+- **Artifact collection** for reports and SSH keys
 - **PR comments** with results
+
+### CI Workflow Steps
+
+```yaml
+# ✅ CENTRALIZED: All dependencies managed by Makefile
+- name: Install all dependencies via Makefile
+  run: make install-ci-deps
+  env:
+    ANSIBLE_VERSION: ${{ matrix.ansible-version }} # Pass version to Makefile
+
+# SSH key generation for validation
+- name: Prepare CI artifacts (SSH keys)
+  run: make prepare-ci-artifacts
+
+# Comprehensive linting (YAML, Ansible, formatting)
+- name: Complete Lint & Validation Check
+  run: |
+    make lint
+    make inventory-check
+
+# Functional testing with generated SSH keys
+- name: Run functional tests using Makefile
+  run: make test
+
+# Security scanning
+- name: Run security checks using Makefile
+  run: make security-check
+```
+
+### Centralized Dependency Management
+
+**Key Principle**: All dependencies are managed exclusively by the Makefile - no duplication in CI workflows.
+
+#### **Makefile Targets**
+
+```bash
+# Install all dependencies for CI (with Ansible version support)
+ANSIBLE_VERSION=">=7.0.0,<8.0.0" make install-ci-deps
+
+# Install development dependencies
+make install-deps
+
+# Complete CI pipeline (includes dependency installation)
+make ci
+```
+
+#### **Benefits**
+
+- ✅ **Single source of truth**: All dependency logic in Makefile
+- ✅ **Version consistency**: CI uses exact same installation as local
+- ✅ **No duplication**: Zero redundant dependency management in workflows
+- ✅ **Matrix support**: Ansible versions passed via environment variables
 
 ### Manual Trigger
 
@@ -88,11 +161,39 @@ gh workflow run "Ansible CI/CD Pipeline"
 
 ### Features
 
+- **Makefile-driven**: Uses `make` targets consistently (same as GitHub Actions)
 - **Multi-stage pipeline** (lint → security → test → report)
 - **Parallel execution** for faster builds
 - **Artifact collection** and reporting
 - **Manual deployment** options
 - **GitLab Pages** integration
+
+### CI Pipeline Jobs
+
+```yaml
+# Comprehensive linting (replaces individual yaml-lint, ansible-lint, etc.)
+comprehensive-lint:
+  script: make lint
+
+# Inventory validation
+inventory-validation:
+  script: make inventory-check
+
+# Security scanning
+security-scan:
+  script: make security-check
+
+# Functional testing with SSH key generation
+functional-test:
+  script: make test
+
+# Makefile integration testing
+makefile-integration:
+  script: |
+    make help
+    make lint-fix
+    make security-check
+```
 
 ### Manual Trigger
 

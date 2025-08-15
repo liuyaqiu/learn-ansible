@@ -82,32 +82,22 @@ jobs:
             ${{ runner.os }}-pip-${{ matrix.python-version }}-
             ${{ runner.os }}-pip-
 
-      - name: 🔧 Install dependencies
+      - name: 🔧 Install all dependencies via Makefile
         run: |
-          python -m pip install --upgrade pip
-          pip install "ansible${{ matrix.ansible-version }}"
-          pip install ansible-lint yamllint jinja2 pre-commit
-          pip install molecule molecule-plugins[docker] pytest-testinfra
-          npm install -g prettier
+          echo "🚀 Installing all dependencies via Makefile..."
+          # Set Ansible version for matrix build
+          export ANSIBLE_VERSION="${{ matrix.ansible-version }}"
+          make install-ci-deps
+        env:
+          ANSIBLE_VERSION: ${{ matrix.ansible-version }}
 
-      - name: 📦 Install Ansible collections
+      - name: 🔑 Prepare CI artifacts (SSH keys)
         run: |
-          # Create logs directory to prevent warnings
-          mkdir -p logs
-          # Clear ansible-compat cache to avoid conflicts
-          rm -rf ~/.cache/ansible-compat/
-          # Install collections with better error handling
-          ansible-galaxy collection install -r requirements.yml --force
-          # Set environment variable to help ansible-lint find collections
-          echo "ANSIBLE_COLLECTIONS_PATH=~/.ansible/collections:/usr/share/ansible/collections" >> $GITHUB_ENV
+          echo "🔑 Using Makefile to prepare CI artifacts..."
+          make prepare-ci-artifacts
+          echo "📋 Generated files:"
+          ls -la ci-artifacts/
         continue-on-error: false
-
-      - name: 🔧 Setup Makefile dependencies (optional)
-        run: |
-          if [ -f Makefile ]; then
-            make install-deps || echo "Makefile install-deps completed with warnings"
-          fi
-        continue-on-error: true
 
       - name: 📝 Display versions
         run: |
@@ -116,35 +106,30 @@ jobs:
           echo "Ansible-lint: $(ansible-lint --version)"
           echo "YAMLlint: $(yamllint --version)"
 
-      - name: 🔍 Complete Lint Check
+      - name: 🔍 Complete Lint & Validation Check
         run: |
-          # Set environment variables for ansible-lint
-          export ANSIBLE_COLLECTIONS_PATH=~/.ansible/collections:/usr/share/ansible/collections
-          export ANSIBLE_LINT_NODEPS=1
+          echo "🚀 Using Makefile for comprehensive linting and validation..."
+          make lint
+          make inventory-check
 
-          # Use our improved Makefile lint target if available
-          if [ -f Makefile ]; then
-            echo "🚀 Using Makefile lint target..."
-            make lint
-          else
-            echo "🔍 Running manual lint checks..."
-            yamllint playbooks/ roles/ group_vars/ inventories/
-            prettier --check "**/*.{yml,yaml,json,md}" --ignore-path .prettierignore
-            for playbook in playbooks/*.yml; do
-              echo "🔍 Checking syntax: $playbook"
-              ansible-playbook --syntax-check -i inventories/dev "$playbook"
-            done
-            # Clear ansible-compat cache before running ansible-lint
-            rm -rf ~/.cache/ansible-compat/
-            ansible-lint --offline playbooks/ roles/
-          fi
-
-      - name: 📋 Inventory Validation
+      - name: 🏷️ Generate artifact name
+        id: artifact-name
         run: |
-          for env in dev prod staging; do
-            echo "🔍 Validating $env inventory..."
-            ansible-inventory -i inventories/$env --list > /dev/null
-          done
+          # Sanitize ansible version for artifact name (remove problematic characters)
+          ANSIBLE_CLEAN=$(echo "${{ matrix.ansible-version }}" | sed 's/[<>,:=]/-/g' | sed 's/--/-/g')
+          ARTIFACT_NAME="ci-artifacts-py${{ matrix.python-version }}-ansible${ANSIBLE_CLEAN}"
+          echo "name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+          echo "Generated artifact name: ${ARTIFACT_NAME}"
+
+      - name: 📤 Upload CI artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ steps.artifact-name.outputs.name }}
+          path: |
+            ci-artifacts/
+            logs/
+          retention-days: 7
 
   # ============================================================================
   # Security Scanning
@@ -162,31 +147,10 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🔍 Check for secrets
+      - name: 🔍 Run security checks using Makefile
         run: |
-          if [ -f scripts/security-scan.sh ]; then
-            echo "🔍 Running security scan script..."
-            bash scripts/security-scan.sh
-          else
-            echo "🔍 Running basic security checks..."
-            # Check for hardcoded passwords (exclude Ansible variable references)
-            password_matches=$(grep -r -n "password.*:" playbooks/ roles/ --include="*.yml" --include="*.yaml" 2>/dev/null | grep -v "{{.*}}" | grep -v "#" || true)
-            if [[ -n "$password_matches" ]]; then
-              echo "$password_matches"
-              echo "❌ Potential hardcoded passwords found!"
-              exit 1
-            fi
-
-            # Check for SSH keys in code
-            private_key_matches=$(grep -r -n "-----BEGIN.*PRIVATE KEY-----" playbooks/ roles/ --include="*.yml" --include="*.yaml" 2>/dev/null || true)
-            if [[ -n "$private_key_matches" ]]; then
-              echo "$private_key_matches"
-              echo "❌ Private keys found in code!"
-              exit 1
-            fi
-
-            echo "✅ No obvious secrets found"
-          fi
+          echo "🛡️ Using Makefile for security scanning..."
+          make security-check
 
       - name: 🛡️ Run Trivy vulnerability scanner (JSON output)
         uses: aquasecurity/trivy-action@master
@@ -263,26 +227,15 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: 🔧 Install Ansible
+      - name: 🔧 Install all dependencies via Makefile
         run: |
-          pip install ansible ansible-lint
+          echo "🚀 Installing all dependencies (system + Python) via Makefile..."
+          make install-ci-deps
 
-      - name: 🏗️ Install system dependencies
+      - name: 🧪 Run functional tests using Makefile
         run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-libvirt
-
-      - name: 📋 Run validation playbook
-        run: |
-          ansible-playbook -i inventories/dev playbooks/validate-config.yml
-
-      - name: 🧪 Test playbooks in check mode
-        run: |
-          # Test destroy playbook (safe in check mode)
-          ansible-playbook --check -i inventories/dev playbooks/vm-destroy.yml
-
-          # Test validate playbook
-          ansible-playbook --check -i inventories/dev playbooks/validate-config.yml
+          echo "🚀 Using Makefile for complete functional testing..."
+          make test
 
   # ============================================================================
   # Multi-OS Testing
@@ -293,7 +246,7 @@ jobs:
     needs: [lint]
     strategy:
       matrix:
-        os: [ubuntu-20.04, ubuntu-22.04, ubuntu-latest]
+        os: [ubuntu-22.04, ubuntu-latest]
       fail-fast: false
 
     steps:
@@ -305,9 +258,9 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: 🔧 Install Ansible
+      - name: 🔧 Install dependencies via Makefile
         run: |
-          pip install ansible
+          make install-ci-deps
 
       - name: ✅ Syntax check on ${{ matrix.os }}
         run: |

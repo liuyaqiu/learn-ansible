@@ -38,8 +38,8 @@ vm_dns: 8.8.8.8 # DNS server
 # ============================================================================
 # AUTHENTICATION - User Specific
 # ============================================================================
-ssh_key_path: /home/liuyaqiu/.ssh/ansible-vm.pub # Public key for cloud-init
-ssh_private_key_path: /home/liuyaqiu/.ssh/ansible-vm # Private key for SSH connections
+ssh_key_path: "/home/liuyaqiu/code/learn-ansible/ci-artifacts/ansible-vm.pub"
+ssh_private_key_path: "/home/liuyaqiu/code/learn-ansible/ci-artifacts/ansible-vm"
 cloud_init_user: ubuntu
 cloud_init_password: ubuntu # Consider using ansible-vault for production
 

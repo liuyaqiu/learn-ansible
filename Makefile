@@ -38,10 +38,109 @@ help: ## Show this help message
 install-deps: ## Install development dependencies
 	@echo "$(GREEN)Installing development dependencies...$(NC)"
 	@mkdir -p logs
-	pip3 install --user ansible-lint yamllint pre-commit
-	npm install -g prettier
-	ansible-galaxy collection install -r requirements.yml --force
-	@echo "$(GREEN)✅ Dependencies installed$(NC)"
+	@echo "$(YELLOW)Installing Python and pip...$(NC)"
+	@if command -v python3 >/dev/null 2>&1; then \
+		python3 -m pip install --upgrade pip; \
+	elif command -v python >/dev/null 2>&1; then \
+		python -m pip install --upgrade pip; \
+	else \
+		echo "$(RED)❌ No Python found$(NC)"; exit 1; \
+	fi
+	@echo "$(YELLOW)Installing Ansible (if ANSIBLE_VERSION specified)...$(NC)"
+	@if [ -n "$(ANSIBLE_VERSION)" ]; then \
+		echo "Installing Ansible version: $(ANSIBLE_VERSION)"; \
+		pip install "ansible$(ANSIBLE_VERSION)" || pip3 install "ansible$(ANSIBLE_VERSION)"; \
+	else \
+		echo "No ANSIBLE_VERSION specified, using system ansible or installing latest"; \
+		pip install ansible 2>/dev/null || pip3 install ansible 2>/dev/null || echo "Ansible already available"; \
+	fi
+	@echo "$(YELLOW)Installing Python development dependencies...$(NC)"
+	@if command -v pip3 >/dev/null 2>&1; then \
+		pip3 install --user ansible-lint yamllint pre-commit 2>/dev/null || pip install ansible-lint yamllint pre-commit; \
+	else \
+		pip install ansible-lint yamllint pre-commit; \
+	fi
+	@echo "$(YELLOW)Installing additional Python packages for CI...$(NC)"
+	@pip install molecule molecule-plugins pytest-testinfra jinja2 2>/dev/null || pip3 install molecule molecule-plugins pytest-testinfra jinja2 2>/dev/null || echo "Some optional packages skipped"
+	@echo "$(YELLOW)Installing Node.js dependencies...$(NC)"
+	@if command -v npm >/dev/null 2>&1; then \
+		npm install -g prettier 2>/dev/null || npm install prettier 2>/dev/null || echo "$(YELLOW)⚠️  Could not install prettier globally, trying local...$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️  npm not found, skipping prettier installation$(NC)"; \
+	fi
+	@echo "$(YELLOW)Installing Ansible collections...$(NC)"
+	@ansible-galaxy collection install -r requirements.yml --force
+	@echo "$(GREEN)✅ All dependencies installed$(NC)"
+
+# CI preparation targets
+.PHONY: install-system-deps
+install-system-deps: ## Install system dependencies for CI
+	@echo "$(GREEN)Installing system dependencies...$(NC)"
+	@if command -v apt-get >/dev/null 2>&1; then \
+		echo "$(YELLOW)Installing Ubuntu/Debian system packages...$(NC)"; \
+		apt-get update -qq 2>/dev/null || sudo apt-get update -qq; \
+		apt-get install -y -qq git openssh-client curl python3-libvirt 2>/dev/null || sudo apt-get install -y -qq git openssh-client curl python3-libvirt; \
+		echo "$(YELLOW)Installing Node.js repository...$(NC)"; \
+		curl -fsSL https://deb.nodesource.com/setup_18.x | bash - 2>/dev/null || curl -fsSL https://deb.nodesource.com/setup_18.x | sudo bash -; \
+		apt-get install -y nodejs 2>/dev/null || sudo apt-get install -y nodejs; \
+	elif command -v yum >/dev/null 2>&1; then \
+		echo "$(YELLOW)Installing RHEL/CentOS system packages...$(NC)"; \
+		yum update -y 2>/dev/null || sudo yum update -y; \
+		yum install -y git openssh-clients curl nodejs npm 2>/dev/null || sudo yum install -y git openssh-clients curl nodejs npm; \
+	elif command -v brew >/dev/null 2>&1; then \
+		echo "$(YELLOW)Installing macOS system packages...$(NC)"; \
+		brew update; \
+		brew install git openssh curl node; \
+	else \
+		echo "$(YELLOW)⚠️  Unknown package manager, skipping system dependencies$(NC)"; \
+	fi
+	@echo "$(GREEN)✅ System dependencies installed$(NC)"
+
+.PHONY: install-ci-deps
+install-ci-deps: install-system-deps ## Install all dependencies for CI environment
+	@echo "$(GREEN)Installing CI dependencies...$(NC)"
+	@echo "$(YELLOW)Note: Use ANSIBLE_VERSION=version to specify Ansible version$(NC)"
+	@$(MAKE) install-deps
+	@echo "$(GREEN)✅ CI dependencies installation complete$(NC)"
+
+.PHONY: prepare-ci-artifacts
+prepare-ci-artifacts: ## Prepare CI artifacts (SSH keys, image directory, updated configs)
+	@echo "$(GREEN)Preparing CI artifacts...$(NC)"
+	@mkdir -p ci-artifacts
+	@echo "$(YELLOW)Creating CI image directory...$(NC)"
+	@mkdir -p ci-artifacts/images
+	@echo "$(YELLOW)Generating SSH key pair for CI...$(NC)"
+	@ssh-keygen -t rsa -b 4096 -f ci-artifacts/ansible-vm -N "" -C "ci-generated-key" -q
+	@echo "$(YELLOW)Updating group_vars/all.yml with CI paths...$(NC)"
+	@echo "$(YELLOW)Creating backup from git version...$(NC)"
+	@git show HEAD:group_vars/all.yml > ci-artifacts/all.yml.backup 2>/dev/null || cp group_vars/all.yml ci-artifacts/all.yml.backup
+	@sed "s|ssh_key_path:.*|ssh_key_path: \"$$PWD/ci-artifacts/ansible-vm.pub\"|" group_vars/all.yml > ci-artifacts/all.yml.tmp1
+	@sed "s|ssh_private_key_path:.*|ssh_private_key_path: \"$$PWD/ci-artifacts/ansible-vm\"|" ci-artifacts/all.yml.tmp1 > ci-artifacts/all.yml.tmp2
+	@sed "s|image_dir:.*|image_dir: $$PWD/ci-artifacts/images|" ci-artifacts/all.yml.tmp2 > ci-artifacts/all.yml.updated
+	@cp ci-artifacts/all.yml.updated group_vars/all.yml
+	@rm -f ci-artifacts/all.yml.tmp1 ci-artifacts/all.yml.tmp2
+	@echo "$(GREEN)✅ CI artifacts prepared:$(NC)"
+	@echo "  - SSH public key: ci-artifacts/ansible-vm.pub"
+	@echo "  - SSH private key: ci-artifacts/ansible-vm"
+	@echo "  - Image directory: ci-artifacts/images"
+	@echo "  - Updated config: group_vars/all.yml"
+	@echo "  - Backup config: ci-artifacts/all.yml.backup"
+
+.PHONY: restore-ci-artifacts
+restore-ci-artifacts: ## Restore original configuration after CI
+	@echo "$(GREEN)Restoring original configuration...$(NC)"
+	@if [ -f ci-artifacts/all.yml.backup ]; then \
+		cp ci-artifacts/all.yml.backup group_vars/all.yml; \
+		echo "$(GREEN)✅ Original group_vars/all.yml restored$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️  No backup found, skipping restore$(NC)"; \
+	fi
+
+.PHONY: clean-ci-artifacts
+clean-ci-artifacts: restore-ci-artifacts ## Clean CI artifacts and restore config
+	@echo "$(GREEN)Cleaning CI artifacts...$(NC)"
+	@rm -rf ci-artifacts/
+	@echo "$(GREEN)✅ CI artifacts cleaned$(NC)"
 
 .PHONY: check-deps
 check-deps: ## Check if required tools are available
@@ -180,13 +279,13 @@ fix-all: format fix-style syntax yaml-lint ## Fix all formatting and style issue
 
 # Testing targets
 .PHONY: test-validate
-test-validate: ## Run validation playbook
+test-validate: prepare-ci-artifacts ## Run validation playbook
 	@echo "$(GREEN)Running validation tests...$(NC)"
 	ansible-playbook -i $(ANSIBLE_INVENTORY) $(PLAYBOOK_DIR)/validate-config.yml
 	@echo "$(GREEN)✅ Validation tests passed$(NC)"
 
 .PHONY: test-dry-run
-test-dry-run: ## Run all playbooks in check mode
+test-dry-run: prepare-ci-artifacts ## Run all playbooks in check mode
 	@echo "$(GREEN)Running dry-run tests...$(NC)"
 	@for playbook in $(PLAYBOOK_DIR)/validate-config.yml $(PLAYBOOK_DIR)/vm-destroy.yml; do \
 		echo "$(YELLOW)Testing $$playbook in check mode...$(NC)"; \
@@ -197,6 +296,12 @@ test-dry-run: ## Run all playbooks in check mode
 .PHONY: test
 test: lint test-validate ## Run all tests (lint + validation)
 	@echo "$(GREEN)🎉 All tests completed successfully!$(NC)"
+	@echo "$(YELLOW)Restoring original configuration...$(NC)"
+	@$(MAKE) restore-ci-artifacts || echo "$(YELLOW)⚠️  Could not restore config (may already be clean)$(NC)"
+
+.PHONY: test-clean
+test-clean: test restore-ci-artifacts ## Run all tests and ensure cleanup
+	@echo "$(GREEN)🎉 All tests completed and cleaned up!$(NC)"
 
 # Security checks
 .PHONY: security-check
@@ -227,8 +332,14 @@ inventory-check: ## Validate inventory files
 
 # CI target (combines everything)
 .PHONY: ci
-ci: check-deps inventory-check lint-fix test security-check ## Run full CI pipeline
+ci: install-ci-deps prepare-ci-artifacts check-deps inventory-check lint-fix test security-check ## Run full CI pipeline
 	@echo "$(GREEN)🚀 Full CI pipeline completed successfully!$(NC)"
+	@echo "$(YELLOW)Note: CI artifacts in ci-artifacts/ directory$(NC)"
+
+# CI target with cleanup
+.PHONY: ci-clean
+ci-clean: ci clean-ci-artifacts ## Run full CI pipeline and clean up artifacts
+	@echo "$(GREEN)🚀 Full CI pipeline completed and cleaned up!$(NC)"
 
 # Cleanup targets
 .PHONY: clean

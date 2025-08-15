@@ -1,0 +1,37 @@
+---
+# ============================================================================
+# Development Environment Configuration
+# ============================================================================
+# This file overrides settings in all.yml for development/testing
+# 
+# Usage: ansible-playbook -i inventory/dev create.yaml
+# ============================================================================
+
+# Development VM settings - smaller resources for testing
+vm_name: dev-vm
+vm_memory: 1024      # Reduced memory for dev
+vm_vcpus: 1
+vm_disk_size: 10     # Smaller disk for dev
+
+# Different IP range for development
+vm_static_ip: 192.168.122.110
+
+# Enable confirmation prompts in development for safety
+confirm_cleanup: true
+
+# Faster timeouts for development iteration
+wait_for_ssh_timeout: 120
+cloud_init_check_retries: 15
+cloud_init_check_delay: 5
+
+# Additional development packages
+vm_packages:
+  - net-tools
+  - iputils-ping
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+  - tree
+  - python3-pip

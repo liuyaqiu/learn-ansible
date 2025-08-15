@@ -1,0 +1,41 @@
+---
+# ============================================================================
+# Production Environment Configuration
+# ============================================================================
+# This file overrides settings in all.yml for production deployment
+# 
+# Usage: ansible-playbook -i inventory/prod create.yaml
+# ============================================================================
+
+# Production VM settings - more resources
+vm_name: prod-vm
+vm_memory: 4096      # More memory for production
+vm_vcpus: 2          # More CPUs for production
+vm_disk_size: 50     # Larger disk for production
+
+# Production IP range
+vm_static_ip: 192.168.122.200
+
+# Disable confirmation prompts in production (assuming automation)
+confirm_cleanup: false
+
+# Longer timeouts for production reliability
+wait_for_ssh_timeout: 600
+cloud_init_check_retries: 60
+cloud_init_check_delay: 15
+
+# Production-focused packages
+vm_packages:
+  - net-tools
+  - iputils-ping
+  - curl
+  - wget
+  - git
+  - vim
+  - rsyslog
+  - logrotate
+  - fail2ban
+  - ufw
+
+# Production DNS (could be internal DNS servers)
+vm_dns: 1.1.1.1

@@ -1,0 +1,66 @@
+---
+# ============================================================================
+# KVM VM Role - KVM/Libvirt Setup Tasks
+# ============================================================================
+
+- name: Install KVM/libvirt and cloud-utils dependencies
+  package:
+    name: "{{ _kvm_required_packages[ansible_os_family] }}"
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Ensure libvirtd service is running and enabled
+  service:
+    name: libvirtd
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Ensure default libvirt network is active and autostarted
+  community.libvirt.virt_net:
+    name: default
+    state: active
+    autostart: yes
+  become: yes
+
+- name: Get default network information
+  community.libvirt.virt_net:
+    name: default
+    command: info
+  register: _kvm_default_network_info
+  become: yes
+
+- name: Get virbr0 IP address for gateway
+  shell: ip addr show virbr0 | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1
+  register: _kvm_virbr0_ip_result
+  changed_when: false
+
+- name: Set virbr0 gateway IP variable
+  set_fact:
+    _kvm_virbr0_gateway_ip: "{{ _kvm_virbr0_ip_result.stdout }}"
+
+- name: Verify network connectivity
+  shell: ping -c 1 -W 2 {{ _kvm_virbr0_gateway_ip }}
+  register: _kvm_network_ping
+  changed_when: false
+  failed_when: _kvm_network_ping.rc != 0
+
+- name: Display network information
+  debug:
+    msg: |
+      ✅ Libvirt default network is active and configured
+      🌐 Gateway IP: {{ _kvm_virbr0_gateway_ip }}
+      📡 Network state: {{ _kvm_default_network_info.networks.default.state }}
+      🔧 Autostart: {{ _kvm_default_network_info.networks.default.autostart }}
+      🌉 Bridge: {{ _kvm_default_network_info.networks.default.bridge }}
+      🏓 Connectivity test: {{ 'PASSED' if _kvm_network_ping.rc == 0 else 'FAILED' }}
+
+- name: Add current user to libvirt group
+  user:
+    name: "{{ ansible_user_id }}"
+    groups: libvirt
+    append: yes
+  become: yes
+  changed_when: false
+  failed_when: false

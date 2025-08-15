@@ -1,0 +1,46 @@
+---
+# ============================================================================
+# KVM VM Role - Internal Variables
+# ============================================================================
+# These variables are used internally by the role and should not be overridden
+# ============================================================================
+
+# ============================================================================
+# COMPUTED PATHS
+# ============================================================================
+_kvm_cloud_img_path: "{{ kvm_image_dir }}/{{ kvm_cloud_img_base_name }}"
+_kvm_vm_disk_path: "{{ kvm_image_dir }}/{{ kvm_vm_name }}.qcow2"
+_kvm_seed_img_path: "{{ kvm_image_dir }}/{{ kvm_vm_name }}-seed.img"
+_kvm_network_config_path: "{{ kvm_image_dir }}/{{ kvm_vm_name }}-network-config"
+_kvm_user_data_path: "{{ kvm_image_dir }}/{{ kvm_vm_name }}-user-data"
+_kvm_meta_data_path: "{{ kvm_image_dir }}/{{ kvm_vm_name }}-meta-data"
+
+# ============================================================================
+# SYSTEM PACKAGES BY OS FAMILY
+# ============================================================================
+_kvm_required_packages:
+  Debian:
+    - qemu-kvm
+    - libvirt-daemon-system
+    - libvirt-clients
+    - virtinst
+    - cloud-image-utils
+    - wget
+    - python3-libvirt
+    - python3-lxml
+  RedHat:
+    - qemu-kvm
+    - libvirt
+    - virt-install
+    - cloud-utils-growpart
+    - cloud-utils
+    - wget
+    - python3-libvirt
+    - python3-lxml
+
+# ============================================================================
+# INTERNAL FLAGS
+# ============================================================================
+_kvm_vm_exists: false
+_kvm_vm_running: false
+_kvm_network_ready: false

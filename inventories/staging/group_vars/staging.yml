@@ -1,0 +1,41 @@
+---
+# ============================================================================
+# Staging Environment Configuration
+# ============================================================================
+# This file overrides settings in all.yml for staging environment
+# 
+# Usage: ansible-playbook -i inventories/staging playbooks/site.yml
+# ============================================================================
+
+# Staging VM settings - moderate resources for testing
+vm_name: staging-vm
+vm_memory: 2048      # Moderate memory for staging
+vm_vcpus: 2          # More CPUs than dev
+vm_disk_size: 30     # Larger disk than dev
+
+# Staging IP range
+vm_static_ip: 192.168.122.150
+
+# Disable confirmation prompts in staging (automated testing)
+confirm_cleanup: false
+
+# Moderate timeouts for staging
+wait_for_ssh_timeout: 300
+cloud_init_check_retries: 20
+cloud_init_check_delay: 10
+
+# Staging-focused packages (between dev and prod)
+vm_packages:
+  - net-tools
+  - iputils-ping
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+  - tree
+  - rsyslog
+  - logrotate
+
+# Staging DNS
+vm_dns: 8.8.8.8

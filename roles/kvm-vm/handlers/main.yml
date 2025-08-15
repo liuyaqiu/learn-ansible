@@ -1,0 +1,28 @@
+---
+# ============================================================================
+# KVM VM Role - Handlers
+# ============================================================================
+
+- name: restart libvirtd
+  service:
+    name: libvirtd
+    state: restarted
+  become: yes
+
+- name: start libvirt default network
+  community.libvirt.virt_net:
+    name: default
+    state: active
+  become: yes
+
+- name: stop vm
+  community.libvirt.virt:
+    name: "{{ kvm_vm_name }}"
+    state: destroyed
+  become: yes
+
+- name: start vm
+  community.libvirt.virt:
+    name: "{{ kvm_vm_name }}"
+    state: running
+  become: yes

@@ -1,0 +1,71 @@
+---
+# ============================================================================
+# VM Destruction Playbook - Focused on removing VMs
+# ============================================================================
+# This playbook specifically handles VM cleanup and removal
+# 
+# Usage:
+#   ansible-playbook -i inventories/dev playbooks/vm-destroy.yml
+# ============================================================================
+
+- name: Destroy and Clean Up KVM Virtual Machine
+  hosts: localhost
+  connection: local
+  become: yes
+  gather_facts: yes
+
+  vars:
+    # Force VM state to absent for this playbook
+    vm_lifecycle_state: absent
+
+  pre_tasks:
+    - name: Display destruction warning
+      debug:
+        msg: |
+          ⚠️  VM DESTRUCTION WARNING ⚠️
+          
+          🎯 Target VM: {{ vm_name }}
+          📍 Environment: {{ group_names | default(['default']) | join(', ') }}
+          🗑️  Action: Complete removal of VM and associated files
+          
+          This operation will:
+          - Stop and destroy the VM if running
+          - Remove VM definition from libvirt
+          - Delete VM disk and cloud-init files
+          - Preserve the base cloud image for reuse
+
+    - name: Safety pause for confirmation
+      pause:
+        prompt: |
+          ⚠️  WARNING: About to destroy VM '{{ vm_name }}'!
+          
+          This action cannot be undone. All VM data will be lost.
+          
+          Press Enter to continue or Ctrl+C to abort.
+      when: confirm_cleanup | default(true)
+
+  roles:
+    - role: kvm-vm
+      vars:
+        kvm_vm_state: "{{ vm_lifecycle_state }}"
+        kvm_vm_name: "{{ vm_name }}"
+        kvm_confirm_cleanup: "{{ confirm_cleanup | default(false) }}"
+
+  post_tasks:
+    - name: Verify VM removal
+      command: virsh list --all --name
+      register: remaining_vms
+      changed_when: false
+      become: yes
+
+    - name: Display destruction summary
+      debug:
+        msg: |
+          ✅ VM Destruction Complete!
+          🗑️  VM '{{ vm_name }}' has been removed
+          📊 Remaining VMs: {{ remaining_vms.stdout_lines | length }}
+          
+          🔄 Next Steps:
+          - Use vm-create.yml to recreate if needed
+          - Base cloud image preserved for future use
+          - Use 'virsh list --all' to verify removal

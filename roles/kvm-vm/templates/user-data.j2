@@ -1,0 +1,25 @@
+#cloud-config
+users:
+  - name: {{ kvm_cloud_init_user }}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh-authorized-keys:
+      - {{ lookup('file', kvm_ssh_key_path) }}
+chpasswd:
+  list: |
+    {{ kvm_cloud_init_user }}:{{ kvm_cloud_init_password }}
+  expire: False
+ssh_pwauth: True
+
+# Install additional packages
+packages:
+{% for package in kvm_vm_packages %}
+  - {{ package }}
+{% endfor %}
+
+# Ensure networking works properly after boot
+runcmd:
+  - systemctl enable systemd-resolved
+  - systemctl start systemd-resolved
+  - netplan apply
+  - systemctl restart systemd-resolved

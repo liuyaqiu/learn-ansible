@@ -1,0 +1,7 @@
+[dev]
+localhost ansible_connection=local
+
+[dev:vars]
+ansible_user=liuyaqiu
+ansible_become=yes
+environment=development

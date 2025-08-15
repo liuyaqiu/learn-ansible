@@ -1,0 +1,31 @@
+---
+# ============================================================================
+# KVM VM Role - Display VM Information
+# ============================================================================
+
+- name: Get VM information
+  community.libvirt.virt:
+    name: "{{ kvm_vm_name }}"
+    command: info
+  register: _kvm_vm_info
+  become: yes
+
+- name: Display VM status
+  debug:
+    msg: |
+      🚀 VM '{{ kvm_vm_name }}' Information:
+      📍 IP Address: {{ kvm_vm_static_ip }}
+      💾 Memory: {{ kvm_vm_memory }} MB
+      🔧 vCPUs: {{ kvm_vm_vcpus }}
+      📊 State: {{ _kvm_vm_info[kvm_vm_name].state }}
+      🌐 Gateway: {{ _kvm_virbr0_gateway_ip | default('N/A') }}
+      
+      📁 File Paths:
+      - VM Disk: {{ _kvm_vm_disk_path }}
+      - Cloud Image: {{ _kvm_cloud_img_path }}
+      - Seed Image: {{ _kvm_seed_img_path }}
+      
+      === Connection Commands ===
+      SSH: ssh -i {{ kvm_ssh_private_key_path }} {{ kvm_cloud_init_user }}@{{ kvm_vm_static_ip }}
+      Console: virsh console {{ kvm_vm_name }}
+      Status: virsh list --all

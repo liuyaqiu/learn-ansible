@@ -1,0 +1,7 @@
+[staging]
+localhost ansible_connection=local
+
+[staging:vars]
+ansible_user=liuyaqiu
+ansible_become=yes
+environment=staging

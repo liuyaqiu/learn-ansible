@@ -1,0 +1,63 @@
+---
+# ============================================================================
+# KVM VM Role - Validation Tasks
+# ============================================================================
+
+- name: Validate required variables are defined
+  assert:
+    that:
+      - kvm_vm_name is defined and kvm_vm_name | length > 0
+      - kvm_vm_memory is defined and kvm_vm_memory | int > 0
+      - kvm_vm_vcpus is defined and kvm_vm_vcpus | int > 0
+      - kvm_vm_disk_size is defined and kvm_vm_disk_size | int > 0
+      - kvm_vm_static_ip is defined and kvm_vm_static_ip | length > 0
+      - kvm_ssh_key_path is defined and kvm_ssh_key_path | length > 0
+      - kvm_ssh_private_key_path is defined and kvm_ssh_private_key_path | length > 0
+      - kvm_cloud_init_user is defined and kvm_cloud_init_user | length > 0
+    fail_msg: "❌ Required KVM VM variables are missing or invalid"
+    success_msg: "✅ All required KVM VM variables are properly defined"
+
+- name: Validate VM resource constraints
+  assert:
+    that:
+      - kvm_vm_memory | int >= 512
+      - kvm_vm_memory | int <= 32768
+      - kvm_vm_vcpus | int >= 1
+      - kvm_vm_vcpus | int <= 16
+      - kvm_vm_disk_size | int >= 5
+      - kvm_vm_disk_size | int <= 500
+    fail_msg: "❌ VM resources are outside reasonable limits"
+    success_msg: "✅ VM resource specifications are within acceptable ranges"
+
+- name: Check if SSH public key file exists
+  stat:
+    path: "{{ kvm_ssh_key_path }}"
+  register: _kvm_ssh_pub_key_stat
+
+- name: Check if SSH private key file exists
+  stat:
+    path: "{{ kvm_ssh_private_key_path }}"
+  register: _kvm_ssh_private_key_stat
+
+- name: Validate SSH public key accessibility
+  assert:
+    that:
+      - _kvm_ssh_pub_key_stat.stat.exists
+      - _kvm_ssh_pub_key_stat.stat.isreg
+    fail_msg: "❌ SSH public key file not found or not accessible: {{ kvm_ssh_key_path }}"
+    success_msg: "✅ SSH public key file exists and is accessible"
+
+- name: Validate SSH private key accessibility
+  assert:
+    that:
+      - _kvm_ssh_private_key_stat.stat.exists
+      - _kvm_ssh_private_key_stat.stat.isreg
+    fail_msg: "❌ SSH private key file not found or not accessible: {{ kvm_ssh_private_key_path }}"
+    success_msg: "✅ SSH private key file exists and is accessible"
+
+- name: Validate VM state parameter
+  assert:
+    that:
+      - kvm_vm_state in ['present', 'absent', 'running', 'stopped']
+    fail_msg: "❌ Invalid VM state: {{ kvm_vm_state }}. Must be one of: present, absent, running, stopped"
+    success_msg: "✅ VM state is valid: {{ kvm_vm_state }}"

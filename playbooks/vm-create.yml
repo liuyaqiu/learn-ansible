@@ -1,0 +1,82 @@
+---
+# ============================================================================
+# VM Creation Playbook - Focused on creating VMs
+# ============================================================================
+# This playbook specifically handles VM creation and setup
+# 
+# Usage:
+#   ansible-playbook -i inventories/dev playbooks/vm-create.yml
+# ============================================================================
+
+- name: Create and Configure KVM Virtual Machine
+  hosts: localhost
+  connection: local
+  become: yes
+  gather_facts: yes
+
+  vars:
+    # Force VM state to present for this playbook
+    vm_lifecycle_state: present
+
+  pre_tasks:
+    - name: Validate SSH connectivity requirements
+      debug:
+        msg: |
+          🔑 SSH Configuration:
+          - Public Key Path: {{ ssh_key_path }}
+          - Private Key Path: {{ ssh_private_key_path }}
+          - Target User: {{ cloud_init_user }}
+          - Target IP: {{ vm_static_ip }}
+          
+          📋 VM Specifications:
+          - Name: {{ vm_name }}
+          - Memory: {{ vm_memory }} MB
+          - vCPUs: {{ vm_vcpus }}
+          - Disk: {{ vm_disk_size }} GB
+
+  roles:
+    - role: kvm-vm
+      vars:
+        kvm_vm_state: "{{ vm_lifecycle_state }}"
+        kvm_vm_name: "{{ vm_name }}"
+        kvm_vm_memory: "{{ vm_memory }}"
+        kvm_vm_vcpus: "{{ vm_vcpus }}"
+        kvm_vm_disk_size: "{{ vm_disk_size }}"
+        kvm_vm_static_ip: "{{ vm_static_ip }}"
+        kvm_vm_packages: "{{ vm_packages }}"
+        kvm_ssh_key_path: "{{ ssh_key_path }}"
+        kvm_ssh_private_key_path: "{{ ssh_private_key_path }}"
+        kvm_cloud_init_user: "{{ cloud_init_user }}"
+        kvm_cloud_init_password: "{{ cloud_init_password }}"
+        kvm_wait_for_ssh_timeout: "{{ wait_for_ssh_timeout }}"
+        kvm_cloud_init_check_retries: "{{ cloud_init_check_retries }}"
+        kvm_cloud_init_check_delay: "{{ cloud_init_check_delay }}"
+
+  post_tasks:
+    - name: Wait for VM to be accessible via SSH
+      wait_for:
+        host: "{{ vm_static_ip }}"
+        port: 22
+        delay: 30
+        timeout: "{{ wait_for_ssh_timeout }}"
+        state: started
+        msg: "Waiting for SSH on {{ vm_static_ip }}:22 to become available..."
+
+    - name: Verify SSH connectivity
+      command: >
+        ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no 
+        -i {{ ssh_private_key_path }} {{ cloud_init_user }}@{{ vm_static_ip }} 
+        'echo "VM is accessible!"'
+      register: ssh_test
+      changed_when: false
+
+    - name: Display success message
+      debug:
+        msg: |
+          🎉 VM Creation Successful!
+          🖥️  VM Name: {{ vm_name }}
+          📍 IP Address: {{ vm_static_ip }}
+          🔑 SSH Access: {{ 'WORKING' if ssh_test.rc == 0 else 'FAILED' }}
+          
+          🔧 Connection Command:
+          ssh -i {{ ssh_private_key_path }} {{ cloud_init_user }}@{{ vm_static_ip }}

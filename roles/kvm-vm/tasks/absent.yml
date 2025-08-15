@@ -1,0 +1,109 @@
+---
+# ============================================================================
+# KVM VM Role - Remove/Cleanup VM
+# ============================================================================
+
+- name: Check current VM status before cleanup
+  community.libvirt.virt:
+    name: "{{ kvm_vm_name }}"
+    command: status
+  register: _kvm_vm_current_status
+  ignore_errors: true
+  become: yes
+
+- name: Display pre-cleanup status
+  debug:
+    msg: |
+      🔍 Pre-cleanup verification for VM '{{ kvm_vm_name }}':
+      📊 Current Status: {{ _kvm_vm_current_status.status | default('VM not found') }}
+      💾 VM exists: {{ 'YES' if _kvm_vm_current_status is not failed else 'NO' }}
+      🗂️ Files to be removed:
+        - VM disk: {{ _kvm_vm_disk_path }}
+        - Cloud-init seed: {{ _kvm_seed_img_path }}
+        - User data: {{ _kvm_user_data_path }}
+        - Meta data: {{ _kvm_meta_data_path }}
+        - Network config: {{ _kvm_network_config_path }}
+      ⚠️  Base image will be preserved: {{ _kvm_cloud_img_path }}
+
+- name: Confirm cleanup operation
+  pause:
+    prompt: |
+      ⚠️  WARNING: This will permanently delete VM '{{ kvm_vm_name }}' and all associated files!
+      
+      Current VM Status: {{ _kvm_vm_current_status.status | default('VM not found') }}
+      
+      Are you sure you want to proceed? Press Enter to continue or Ctrl+C to abort.
+  when: kvm_confirm_cleanup
+
+- name: Ensure VM is stopped/destroyed if running
+  community.libvirt.virt:
+    name: "{{ kvm_vm_name }}"
+    state: destroyed
+  register: _kvm_vm_destroy_result
+  ignore_errors: true
+  become: yes
+
+- name: Undefine the VM if it exists
+  community.libvirt.virt:
+    name: "{{ kvm_vm_name }}"
+    command: undefine
+  register: _kvm_vm_undefine_result
+  ignore_errors: true
+  become: yes
+
+- name: Report VM deletion status
+  debug:
+    msg: |
+      🗑️ VM '{{ kvm_vm_name }}' cleanup status:
+      💥 Destroy result: {{ 'SUCCESS - VM was stopped and destroyed' if _kvm_vm_destroy_result.changed else 'SKIPPED - VM was already stopped or not found' }}
+      🔧 Undefine result: {{ 'SUCCESS - VM definition removed' if _kvm_vm_undefine_result.changed else 'SKIPPED - VM was already undefined or not found' }}
+
+- name: Remove VM-related files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  register: _kvm_file_cleanup_results
+  ignore_errors: true
+  loop:
+    - { path: "{{ _kvm_vm_disk_path }}", name: "VM disk" }
+    - { path: "{{ _kvm_seed_img_path }}", name: "Cloud-init seed image" }
+    - { path: "{{ _kvm_user_data_path }}", name: "Cloud-init user-data" }
+    - { path: "{{ _kvm_meta_data_path }}", name: "Cloud-init meta-data" }
+    - { path: "{{ _kvm_network_config_path }}", name: "Network configuration" }
+  become: yes
+
+- name: Report file cleanup status
+  debug:
+    msg: |
+      🗂️ File cleanup status:
+      {% for result in _kvm_file_cleanup_results.results %}
+      📄 {{ result.item.name }}: {{ 'REMOVED' if result.changed else 'NOT FOUND (already cleaned)' }}
+      {% endfor %}
+
+- name: Verify VM cleanup completion
+  community.libvirt.virt:
+    name: "{{ kvm_vm_name }}"
+    command: status
+  register: _kvm_final_vm_status
+  ignore_errors: true
+  become: yes
+
+- name: Display comprehensive cleanup completion message
+  debug:
+    msg: |
+      ✅ Cleanup complete for VM '{{ kvm_vm_name }}'!
+      
+      📊 Final Status:
+      🖥️  VM Status: {{ 'VM completely removed' if _kvm_final_vm_status is failed else 'WARNING: VM still exists!' }}
+      🗂️  Associated files: Cleaned up
+      ☁️  Base cloud image: Preserved ({{ _kvm_cloud_img_path }})
+      
+      📋 Summary:
+      {% if _kvm_vm_destroy_result is defined and _kvm_vm_destroy_result.changed %}✅ VM was stopped and destroyed{% endif %}
+      {% if _kvm_vm_undefine_result is defined and _kvm_vm_undefine_result.changed %}✅ VM definition was removed{% endif %}
+      {% if _kvm_file_cleanup_results is defined %}✅ {{ _kvm_file_cleanup_results.results | selectattr('changed') | list | length }} files were removed{% endif %}
+      
+      🔄 Next Steps:
+      - The base cloud image can be reused for new VMs
+      - Use the 'present' state to recreate the VM if needed
+      - Use 'sudo virsh list --all' to verify VM removal

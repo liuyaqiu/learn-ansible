@@ -1,0 +1,14 @@
+network:
+  version: 2
+  ethernets:
+    enp1s0:
+      dhcp4: false
+      dhcp6: false
+      addresses:
+        - {{ kvm_vm_static_ip }}/24
+      routes:
+        - to: default
+          via: {{ _kvm_virbr0_gateway_ip }}
+      nameservers:
+        addresses: [{{ _kvm_virbr0_gateway_ip }}]
+        search: []

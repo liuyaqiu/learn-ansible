@@ -1,0 +1,275 @@
+# ============================================================================
+# GitLab CI - Ansible Pipeline
+# ============================================================================
+# Features: Multi-stage pipeline, caching, parallel jobs, artifact collection
+# Stages: lint, security, test, deploy
+# ============================================================================
+
+stages:
+  - 🔍 lint
+  - 🔒 security
+  - 🧪 test
+  - 📊 report
+
+# ============================================================================
+# Global Configuration
+# ============================================================================
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  ANSIBLE_FORCE_COLOR: "true"
+  ANSIBLE_HOST_KEY_CHECKING: "false"
+
+# Cache configuration
+cache:
+  paths:
+    - .cache/pip/
+    - venv/
+
+# Default image
+default:
+  image: python:3.10-slim
+
+# Before script for all jobs
+before_script:
+  - apt-get update -qq && apt-get install -y -qq git openssh-client curl
+  - curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+  - apt-get install -y nodejs
+  - pip install --upgrade pip
+  - pip install ansible ansible-lint yamllint pre-commit
+  - npm install -g prettier
+
+# ============================================================================
+# Lint Stage
+# ============================================================================
+yaml-lint:
+  stage: 🔍 lint
+  script:
+    - echo "🔍 Running YAML lint checks..."
+    - yamllint playbooks/ roles/ group_vars/ inventories/
+  artifacts:
+    reports:
+      junit: yamllint-report.xml
+    when: always
+    expire_in: 1 week
+  rules:
+    - changes:
+        - "**/*.yml"
+        - "**/*.yaml"
+        - ".gitlab-ci.yml"
+
+format-check:
+  stage: 🔍 lint
+  script:
+    - echo "🎨 Checking formatting with Prettier..."
+    - prettier --check "**/*.{yml,yaml,json,md}" --ignore-path .prettierignore
+  rules:
+    - changes:
+        - "**/*.yml"
+        - "**/*.yaml"
+        - "scripts/format.sh"
+
+ansible-syntax:
+  stage: 🔍 lint
+  script:
+    - echo "✅ Running Ansible syntax checks..."
+    - |
+      for playbook in playbooks/*.yml; do
+        echo "🔍 Checking syntax: $playbook"
+        ansible-playbook --syntax-check -i inventories/dev "$playbook"
+      done
+  artifacts:
+    when: always
+    expire_in: 1 week
+  rules:
+    - changes:
+        - "playbooks/**"
+        - "roles/**"
+        - "group_vars/**"
+        - "inventories/**"
+        - "ansible.cfg"
+
+ansible-lint:
+  stage: 🔍 lint
+  script:
+    - echo "🧹 Running Ansible lint..."
+    - ansible-lint playbooks/ roles/ --format sarif --output-file ansible-lint.sarif
+  artifacts:
+    reports:
+      sast: ansible-lint.sarif
+    when: always
+    expire_in: 1 week
+  allow_failure: true
+  rules:
+    - changes:
+        - "playbooks/**"
+        - "roles/**"
+
+inventory-validation:
+  stage: 🔍 lint
+  script:
+    - echo "📋 Validating inventories..."
+    - |
+      for env in dev prod staging; do
+        echo "🔍 Validating $env inventory..."
+        ansible-inventory -i inventories/$env --list > /dev/null
+      done
+  rules:
+    - changes:
+        - "inventories/**"
+        - "group_vars/**"
+
+# ============================================================================
+# Security Stage
+# ============================================================================
+secret-scan:
+  stage: 🔒 security
+  script:
+    - echo "🔍 Scanning for secrets..."
+    - |
+      # Check for hardcoded passwords
+      if grep -r -n "password.*:" playbooks/ roles/ --include="*.yml" --include="*.yaml" | grep -v "cloud_init_password.*ubuntu"; then
+        echo "❌ Potential hardcoded passwords found!"
+        exit 1
+      fi
+
+      # Check for SSH keys
+      if grep -r -n "-----BEGIN.*PRIVATE KEY-----" playbooks/ roles/ --include="*.yml" --include="*.yaml"; then
+        echo "❌ Private keys found in code!"
+        exit 1
+      fi
+
+      echo "✅ No obvious secrets found"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+security-scan:
+  stage: 🔒 security
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - trivy fs --format sarif --output trivy-report.sarif .
+  artifacts:
+    reports:
+      sast: trivy-report.sarif
+    when: always
+    expire_in: 1 week
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ============================================================================
+# Test Stage
+# ============================================================================
+validation-test:
+  stage: 🧪 test
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git openssh-client python3-libvirt
+    - pip install --upgrade pip
+    - pip install ansible
+  script:
+    - echo "🧪 Running validation tests..."
+    - ansible-playbook -i inventories/dev playbooks/validate-config.yml
+  artifacts:
+    when: always
+    expire_in: 1 week
+  rules:
+    - changes:
+        - "playbooks/**"
+        - "roles/**"
+        - "group_vars/**"
+        - "inventories/**"
+
+check-mode-test:
+  stage: 🧪 test
+  script:
+    - echo "🧪 Testing playbooks in check mode..."
+    - ansible-playbook --check -i inventories/dev playbooks/validate-config.yml
+    - ansible-playbook --check -i inventories/dev playbooks/vm-destroy.yml
+  allow_failure: true
+  rules:
+    - changes:
+        - "playbooks/**"
+        - "roles/**"
+
+# Parallel testing on different Python versions
+.test-template: &test-template
+  stage: 🧪 test
+  script:
+    - pip install ansible
+    - ansible-playbook --syntax-check -i inventories/dev playbooks/validate-config.yml
+  parallel:
+    matrix:
+      - PYTHON_VERSION: ["3.9", "3.10", "3.11"]
+  image: python:${PYTHON_VERSION}-slim
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+python-compatibility:
+  <<: *test-template
+
+# ============================================================================
+# Report Stage
+# ============================================================================
+generate-report:
+  stage: 📊 report
+  script:
+    - echo "📊 Generating pipeline report..."
+    - |
+      cat > pipeline-report.md << EOF
+      # 🚀 Ansible CI/CD Pipeline Report
+
+      ## 📋 Pipeline Summary
+      - **Commit**: ${CI_COMMIT_SHA}
+      - **Branch**: ${CI_COMMIT_REF_NAME}
+      - **Pipeline ID**: ${CI_PIPELINE_ID}
+      - **Trigger**: ${CI_PIPELINE_SOURCE}
+      - **User**: ${GITLAB_USER_NAME}
+
+      ## 📁 Files Processed
+      \`\`\`
+      $(find playbooks/ roles/ group_vars/ inventories/ -name "*.yml" -o -name "*.yaml" | sort)
+      \`\`\`
+
+      ## 🔗 Links
+      - [Pipeline](${CI_PIPELINE_URL})
+      - [Commit](${CI_PROJECT_URL}/-/commit/${CI_COMMIT_SHA})
+      EOF
+  artifacts:
+    paths:
+      - pipeline-report.md
+    expire_in: 1 month
+  when: always
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
+
+# ============================================================================
+# Pages (for GitLab Pages integration)
+# ============================================================================
+pages:
+  stage: 📊 report
+  script:
+    - mkdir public
+    - cp pipeline-report.md public/index.md
+    - echo "<html><body><pre>$(cat pipeline-report.md)</pre></body></html>" > public/index.html
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  needs:
+    - generate-report
+
+# ============================================================================
+# Manual Jobs
+# ============================================================================
+manual-full-test:
+  stage: 🧪 test
+  script:
+    - echo "🧪 Running comprehensive manual tests..."
+    - make ci
+  when: manual
+  allow_failure: false
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"

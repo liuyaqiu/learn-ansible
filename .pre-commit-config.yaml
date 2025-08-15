@@ -1,0 +1,164 @@
+# ============================================================================
+# Pre-commit Hooks Configuration for Ansible
+# ============================================================================
+# Install: pip install pre-commit && pre-commit install
+# Usage: pre-commit run --all-files (manual) or automatic on git commit
+# ============================================================================
+
+repos:
+  # ============================================================================
+  # General Git and File Checks
+  # ============================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+        name: 🧹 Remove trailing whitespace
+      - id: end-of-file-fixer
+        name: 📝 Fix end of files
+      - id: check-yaml
+        name: ✅ Check YAML syntax
+        files: \.(yml|yaml)$
+      - id: check-added-large-files
+        name: 📏 Check for large files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+        name: 🔀 Check for merge conflicts
+      - id: check-case-conflict
+        name: 📁 Check for case conflicts
+      - id: mixed-line-ending
+        name: 📄 Fix mixed line endings
+        args: ["--fix=lf"]
+
+  # ============================================================================
+  # YAML Formatting and Linting with Prettier
+  # ============================================================================
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.3
+    hooks:
+      - id: prettier
+        name: 🎨 Prettier (YAML, JSON, Markdown)
+        files: \.(yml|yaml|json|md)$
+        exclude: |
+          (?x)^(
+            .github/.*|
+            .gitlab-ci.yml
+          )$
+        args: ["--tab-width=2", "--print-width=100", "--prose-wrap=preserve"]
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.32.0
+    hooks:
+      - id: yamllint
+        name: 📝 YAML Lint
+        args:
+          [
+            "--config-data",
+            "{extends: default, rules: {line-length: {max: 200}, indentation: {spaces: 2}, comments-indentation: disable, comments: {min-spaces-from-content: 1}}}"
+          ]
+        files: \.(yml|yaml)$
+
+  # ============================================================================
+  # Ansible Specific Checks
+  # ============================================================================
+  - repo: https://github.com/ansible/ansible-lint
+    rev: v6.17.2
+    hooks:
+      - id: ansible-lint
+        name: 🔍 Ansible Lint
+        files: \.(yml|yaml)$
+        exclude: |
+          (?x)^(
+            .github/.*|
+            molecule/.*|
+            .gitlab-ci.yml
+          )$
+        args:
+          - --config-file=.ansible-lint
+
+  # ============================================================================
+  # Security Checks
+  # ============================================================================
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        name: 🔒 Detect secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: |
+          (?x)^(
+            .*\.lock$|
+            .*\.log$|
+            .*/tests/.*
+          )$
+
+  # ============================================================================
+  # Additional Formatting Tools
+  # ============================================================================
+  - repo: https://github.com/psf/black
+    rev: 23.9.1
+    hooks:
+      - id: black
+        name: 🐍 Black Python Formatter
+        language_version: python3
+        files: \.py$
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        name: 📦 isort Python Import Sorter
+        args: ["--profile", "black"]
+        files: \.py$
+
+  # ============================================================================
+  # Custom Local Hooks
+  # ============================================================================
+  - repo: local
+    hooks:
+      - id: ansible-syntax-check
+        name: ✅ Ansible Syntax Check
+        entry: scripts/ansible-syntax-check.sh
+        language: script
+        files: \.(yml|yaml)$
+        exclude: |
+          (?x)^(
+            .github/.*|
+            .gitlab-ci.yml|
+            .pre-commit-config.yaml
+          )$
+        pass_filenames: false
+
+      - id: inventory-validation
+        name: 📋 Inventory Validation
+        entry: scripts/validate-inventories.sh
+        language: script
+        files: ^inventories/.*\.(yml|yaml|ini)$
+        pass_filenames: false
+
+      - id: role-validation
+        name: 🎭 Role Structure Validation
+        entry: scripts/validate-roles.sh
+        language: script
+        files: ^roles/.*$
+        pass_filenames: false
+
+      - id: security-scan
+        name: 🛡️ Security Scan
+        entry: scripts/security-scan.sh
+        language: script
+        files: \.(yml|yaml)$
+        exclude: |
+          (?x)^(
+            .github/.*|
+            .gitlab-ci.yml
+          )$
+        pass_filenames: false
+
+# ============================================================================
+# Pre-commit Configuration
+# ============================================================================
+default_stages: [commit]
+fail_fast: false
+default_language_version:
+  python: python3

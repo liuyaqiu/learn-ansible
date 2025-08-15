@@ -1,12 +1,12 @@
----
 # ============================================================================
-# KVM VM Role - Internal Variables
+# KVM VM Role - Internal Variables - ENHANCED VERSION
 # ============================================================================
-# These variables are used internally by the role and should not be overridden
+# This file contains role implementation details and computed values.
+# User configuration comes from group_vars.
 # ============================================================================
 
 # ============================================================================
-# COMPUTED PATHS
+# COMPUTED PATHS - Role Logic
 # ============================================================================
 _kvm_cloud_img_path: "{{ kvm_image_dir }}/{{ kvm_cloud_img_base_name }}"
 _kvm_vm_disk_path: "{{ kvm_image_dir }}/{{ kvm_vm_name }}.qcow2"
@@ -16,7 +16,7 @@ _kvm_user_data_path: "{{ kvm_image_dir }}/{{ kvm_vm_name }}-user-data"
 _kvm_meta_data_path: "{{ kvm_image_dir }}/{{ kvm_vm_name }}-meta-data"
 
 # ============================================================================
-# SYSTEM PACKAGES BY OS FAMILY
+# SYSTEM PACKAGES - Role Knowledge
 # ============================================================================
 _kvm_required_packages:
   Debian:
@@ -39,7 +39,7 @@ _kvm_required_packages:
     - python3-lxml
 
 # ============================================================================
-# INTERNAL FLAGS
+# INTERNAL STATE - Role Runtime
 # ============================================================================
 _kvm_vm_exists: false
 _kvm_vm_running: false

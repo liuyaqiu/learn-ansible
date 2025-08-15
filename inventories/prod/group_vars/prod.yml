@@ -3,15 +3,15 @@
 # Production Environment Configuration
 # ============================================================================
 # This file overrides settings in all.yml for production deployment
-# 
+#
 # Usage: ansible-playbook -i inventory/prod create.yaml
 # ============================================================================
 
 # Production VM settings - more resources
 vm_name: prod-vm
-vm_memory: 4096      # More memory for production
-vm_vcpus: 2          # More CPUs for production
-vm_disk_size: 50     # Larger disk for production
+vm_memory: 4096 # More memory for production
+vm_vcpus: 2 # More CPUs for production
+vm_disk_size: 50 # Larger disk for production
 
 # Production IP range
 vm_static_ip: 192.168.122.200

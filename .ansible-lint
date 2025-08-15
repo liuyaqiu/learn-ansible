@@ -1,0 +1,74 @@
+# ============================================================================
+# Ansible Lint Configuration
+# ============================================================================
+# Documentation: https://ansible-lint.readthedocs.io/
+# ============================================================================
+
+# Exclude paths
+exclude_paths:
+  - .cache/
+  - .github/
+  - .gitlab-ci.yml
+  - molecule/
+  - .pre-commit-config.yaml
+
+# Enable offline mode (don't check for updates)
+offline: false
+
+# Use default rules
+use_default_rules: true
+
+# Skip specific rules
+skip_list:
+  - yaml[line-length]  # Allow longer lines in templates
+  - name[casing]       # Allow different naming conventions
+  - jinja[spacing]     # Allow flexible Jinja2 spacing
+
+# Enable specific rules
+enable_list:
+  - no-changed-when
+  - no-handler
+  - no-relative-paths
+  - fqcn[action-core]
+
+# Set the kinds of files to be linted
+kinds:
+  - yaml: "*.yaml"
+  - yaml: "*.yml"
+  - playbook: "**/playbooks/*.yml"
+  - playbook: "**/playbooks/*.yaml"
+  - tasks: "**/tasks/*.yml"
+  - tasks: "**/tasks/*.yaml"
+  - handlers: "**/handlers/*.yml"
+  - handlers: "**/handlers/*.yaml"
+  - vars: "**/vars/*.yml"
+  - vars: "**/vars/*.yaml"
+  - defaults: "**/defaults/*.yml"
+  - defaults: "**/defaults/*.yaml"
+  - meta: "**/meta/*.yml"
+  - meta: "**/meta/*.yaml"
+
+# Warn for specific rules instead of failing
+warn_list:
+  - experimental
+  - ignore-errors
+  - no-changed-when
+  - yaml[document-start]
+
+# Rules that can be auto-fixed (use only valid ansible-lint fix targets)
+write_list:
+  - fqcn
+  - yaml
+  - formatting
+
+# Mock modules or roles
+mock_modules:
+  - community.general.ansible_galaxy_install
+
+mock_roles:
+  - ansible.posix.mount
+
+# Extra variables
+extra_vars:
+  ansible_user: ubuntu
+  ansible_become: true

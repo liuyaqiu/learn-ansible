@@ -1,76 +1,59 @@
 ---
 # ============================================================================
-# VM Configuration for KVM/Libvirt Ansible Playbooks
+# VM Configuration for KVM/Libvirt Ansible Playbooks - CLEAN VERSION
 # ============================================================================
-# This file contains all shared configuration variables used by both
-# create.yaml and cleanup.yaml playbooks.
+# This file contains ONLY user-configurable variables.
+# Implementation details are handled by the role.
 #
 # Usage:
 #   - Variables defined here are automatically loaded by all playbooks
-#   - Override any values by creating host-specific files in host_vars/
-#   - For development/testing, you can copy this to group_vars/dev.yml
+#   - Override any values by creating environment-specific files in inventories/{env}/group_vars/
+#   - This file is shared across all environments for consistency
 #
-# Last Updated: $(date)
 # ============================================================================
 
 # ============================================================================
-# BASIC VM CONFIGURATION
+# VM CONFIGURATION - User Choices
 # ============================================================================
 vm_name: hello-vm
-vm_memory: 2048       # Memory in MB
-vm_vcpus: 1          # Number of virtual CPUs
-vm_disk_size: 20     # Disk size in GB for the overlay disk
+vm_memory: 2048 # Memory in MB
+vm_vcpus: 1 # Number of virtual CPUs
+vm_disk_size: 20 # Disk size in GB for the overlay disk
 
 # ============================================================================
-# DIRECTORY AND FILE PATHS
+# INFRASTRUCTURE SETTINGS - Environment Specific
 # ============================================================================
-image_dir: /var/lib/libvirt/images  # Standard location for libvirt images
-
-# Derived paths (automatically calculated from above variables)
-vm_disk_path: "{{ image_dir }}/{{ vm_name }}.qcow2"
-seed_img_path: "{{ image_dir }}/{{ vm_name }}-seed.img"
-network_config_path: "{{ image_dir }}/{{ vm_name }}-network-config"
-user_data_path: "{{ image_dir }}/{{ vm_name }}-user-data"
-meta_data_path: "{{ image_dir }}/{{ vm_name }}-meta-data"
-
-# ============================================================================
-# CLOUD IMAGE CONFIGURATION
-# ============================================================================
+image_dir: /var/lib/libvirt/images # Standard location for libvirt images
 cloud_img_url: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
 cloud_img_base_name: noble-server-cloudimg-amd64.img
-cloud_img_path: "{{ image_dir }}/{{ cloud_img_base_name }}"
 
 # ============================================================================
-# NETWORK CONFIGURATION
+# NETWORK CONFIGURATION - User/Environment Specific
 # ============================================================================
-vm_static_ip: 192.168.122.100    # Static IP for the VM
-vm_netmask: 255.255.255.0        # Netmask
-vm_gateway: "{{ virbr0_gateway_ip }}"  # Gateway (dynamically determined from virbr0)
-vm_dns: 8.8.8.8                 # DNS server
+vm_static_ip: 192.168.122.100 # Static IP for the VM
+vm_netmask: 255.255.255.0 # Netmask
+vm_gateway: "192.168.122.1" # Gateway for default libvirt network
+vm_dns: 8.8.8.8 # DNS server
 
 # ============================================================================
-# AUTHENTICATION CONFIGURATION
+# AUTHENTICATION - User Specific
 # ============================================================================
-# SSH Key Paths (update these paths to match your SSH key location)
-ssh_key_path: /home/liuyaqiu/.ssh/ansible-vm.pub          # Public key for cloud-init
-ssh_private_key_path: /home/liuyaqiu/.ssh/ansible-vm      # Private key for SSH connections
-ssh_pub_key: "{{ lookup('file', ssh_key_path) }}"
+ssh_key_path: /home/liuyaqiu/.ssh/ansible-vm.pub # Public key for cloud-init
+ssh_private_key_path: /home/liuyaqiu/.ssh/ansible-vm # Private key for SSH connections
+cloud_init_user: ubuntu
+cloud_init_password: ubuntu # Consider using ansible-vault for production
 
 # ============================================================================
-# PLAYBOOK BEHAVIOR CONFIGURATION
+# BEHAVIOR CONFIGURATION - User Preferences
 # ============================================================================
-# Cleanup options
-confirm_cleanup: false  # Set to true to require confirmation before cleanup
-
-# Create options  
-wait_for_ssh_timeout: 300    # Seconds to wait for SSH accessibility
+confirm_cleanup: false # Set to true to require confirmation before cleanup
+wait_for_ssh_timeout: 300 # Seconds to wait for SSH accessibility
 cloud_init_check_retries: 30 # Number of times to check cloud-init status
-cloud_init_check_delay: 10   # Seconds between cloud-init status checks
+cloud_init_check_delay: 10 # Seconds between cloud-init status checks
 
 # ============================================================================
-# PACKAGE CONFIGURATION
+# PACKAGE LISTS - User/Environment Specific
 # ============================================================================
-# Packages to install via cloud-init
 vm_packages:
   - net-tools
   - iputils-ping
@@ -78,81 +61,4 @@ vm_packages:
   - wget
   - git
   - vim
-
-# Required system packages for the Ansible host
-required_packages_debian:
-  - qemu-kvm
-  - libvirt-daemon-system
-  - libvirt-clients
-  - virtinst
-  - cloud-image-utils
-  - wget
-  - python3-libvirt
-  - python3-lxml
-
-required_packages_redhat:
-  - qemu-kvm
-  - libvirt
-  - virt-install
-  - cloud-utils-growpart
-  - cloud-utils
-  - wget
-  - python3-libvirt
-  - python3-lxml
-
-# ============================================================================
-# CLOUD-INIT CONFIGURATION TEMPLATES
-# ============================================================================
-# Default user configuration for cloud-init
-cloud_init_user: ubuntu
-cloud_init_password: ubuntu  # Consider using ansible-vault for production
-
-# Network configuration template
-network_config_template: |
-  network:
-    version: 2
-    ethernets:
-      enp1s0:
-        dhcp4: false
-        dhcp6: false
-        addresses:
-          - {{ vm_static_ip }}/24
-        routes:
-          - to: default
-            via: {{ vm_gateway }}
-        nameservers:
-          addresses: [{{ vm_gateway }}]
-          search: []
-
-# User data template for cloud-init
-user_data_template: |
-  #cloud-config
-  users:
-    - name: {{ cloud_init_user }}
-      sudo: ALL=(ALL) NOPASSWD:ALL
-      shell: /bin/bash
-      ssh-authorized-keys:
-        - {{ ssh_pub_key }}
-  chpasswd:
-    list: |
-      {{ cloud_init_user }}:{{ cloud_init_password }}
-    expire: False
-  ssh_pwauth: True
-  
-  # Install additional packages
-  packages:
-    {% for package in vm_packages %}
-    - {{ package }}
-    {% endfor %}
-  
-  # Ensure networking works properly after boot
-  runcmd:
-    - systemctl enable systemd-resolved
-    - systemctl start systemd-resolved
-    - netplan apply
-    - systemctl restart systemd-resolved
-
-# Meta data template for cloud-init
-meta_data_template: |
-  instance-id: {{ vm_name }}
-  local-hostname: {{ vm_name }}
+# System packages are defined in role vars (OS-specific knowledge)

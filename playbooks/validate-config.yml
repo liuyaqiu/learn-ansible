@@ -1,9 +1,8 @@
----
 # ============================================================================
 # Configuration Validation Playbook
 # ============================================================================
 # This playbook validates the configuration before VM operations
-# 
+#
 # Usage:
 #   ansible-playbook -i inventories/dev playbooks/validate-config.yml
 # ============================================================================
@@ -11,11 +10,12 @@
 - name: Validate VM Configuration
   hosts: localhost
   connection: local
-  gather_facts: yes
+  gather_facts: true
+  become: false
 
   pre_tasks:
     - name: Display validation context
-      debug:
+      ansible.builtin.debug:
         msg: |
           🔍 Configuration Validation Starting
           📋 Environment: {{ group_names | default(['default']) | join(', ') }}
@@ -23,11 +23,11 @@
 
   tasks:
     - name: Display current configuration summary
-      debug:
+      ansible.builtin.debug:
         msg: |
           🔍 Configuration Summary
           ========================
-          
+
           📋 Environment: {{ group_names | default(['default']) | join(', ') }}
           🖥️  VM Name: {{ vm_name }}
           💾 Memory: {{ vm_memory }} MB
@@ -37,14 +37,14 @@
           🔑 SSH Key: {{ ssh_key_path }}
           👤 User: {{ cloud_init_user }}
           📦 Packages: {{ vm_packages | length }} packages
-          
+
           📁 File Paths (computed):
           - VM Disk: {{ image_dir }}/{{ vm_name }}.qcow2
           - Cloud Image: {{ image_dir }}/{{ cloud_img_base_name }}
           - Seed Image: {{ image_dir }}/{{ vm_name }}-seed.img
 
     - name: Include role validation
-      include_role:
+      ansible.builtin.include_role:
         name: kvm-vm
         tasks_from: validate.yml
       vars:
@@ -56,9 +56,10 @@
         kvm_ssh_key_path: "{{ ssh_key_path }}"
         kvm_ssh_private_key_path: "{{ ssh_private_key_path }}"
         kvm_cloud_init_user: "{{ cloud_init_user }}"
+        kvm_vm_state: "present"
 
     - name: Check for potential IP conflicts
-      shell: |
+      ansible.builtin.shell: |
         if ping -c 1 -W 1 {{ vm_static_ip }} >/dev/null 2>&1; then
           echo "IP_IN_USE"
         else
@@ -69,7 +70,7 @@
       failed_when: false
 
     - name: Report IP availability
-      debug:
+      ansible.builtin.debug:
         msg: |
           {% if ip_check.stdout == "IP_IN_USE" %}
           ⚠️  WARNING: IP {{ vm_static_ip }} appears to be in use
@@ -78,12 +79,12 @@
           {% endif %}
 
     - name: Validate image directory permissions
-      stat:
+      ansible.builtin.stat:
         path: "{{ image_dir }}"
       register: image_dir_stat
 
     - name: Check image directory accessibility
-      assert:
+      ansible.builtin.assert:
         that:
           - image_dir_stat.stat.exists
           - image_dir_stat.stat.isdir
@@ -92,20 +93,20 @@
 
   post_tasks:
     - name: Display validation results
-      debug:
+      ansible.builtin.debug:
         msg: |
           ✅ Configuration Validation Complete!
-          
+
           📊 Summary:
           - All required variables: ✅ Valid
-          - Resource constraints: ✅ Within limits  
+          - Resource constraints: ✅ Within limits
           - IP address format: ✅ Valid
           - SSH key: ✅ Accessible
           - Package list: ✅ Configured
           - Image directory: ✅ Accessible
-          
+
           🚀 Configuration is ready for deployment!
-          
+
           💡 Next Steps:
           - Run: ansible-playbook -i inventories/{{ group_names[0] | default('dev') }} playbooks/site.yml
           - Or create VM: ansible-playbook -i inventories/{{ group_names[0] | default('dev') }} playbooks/vm-create.yml

@@ -1,12 +1,11 @@
----
 galaxy_info:
-  role_name: kvm-vm
+  role_name: kvmvm
   author: "VM Infrastructure Team"
   description: "Complete KVM virtual machine lifecycle management"
   company: "Learning Ansible"
   license: "MIT"
   min_ansible_version: "2.9"
-  
+
   platforms:
     - name: Ubuntu
       versions:
@@ -26,7 +25,7 @@ galaxy_info:
     - virtualization
     - kvm
     - libvirt
-    - cloud-init
-    - vm-management
+    - cloudinit
+    - vmmanagement
 
 dependencies: []

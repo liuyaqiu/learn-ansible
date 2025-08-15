@@ -1,16 +1,15 @@
----
 # ============================================================================
 # Site Playbook - Main orchestration for all environments
 # ============================================================================
 # This is the main entry point for VM management operations
-# 
+#
 # Usage Examples:
 #   # Create/ensure VM is present and running
 #   ansible-playbook -i inventories/dev site.yml
-#   
+#
 #   # Remove VM completely
 #   ansible-playbook -i inventories/dev site.yml -e "vm_lifecycle_state=absent"
-#   
+#
 #   # Just get VM information
 #   ansible-playbook -i inventories/dev site.yml --tags info
 # ============================================================================
@@ -18,8 +17,8 @@
 - name: VM Lifecycle Management
   hosts: localhost
   connection: local
-  become: yes
-  gather_facts: yes
+  become: true
+  gather_facts: true
 
   vars:
     # Default lifecycle state - can be overridden via -e
@@ -27,7 +26,7 @@
 
   pre_tasks:
     - name: Display execution context
-      debug:
+      ansible.builtin.debug:
         msg: |
           🎯 VM Lifecycle Management Starting
           📋 Environment: {{ group_names | default(['default']) | join(', ') }}
@@ -54,10 +53,15 @@
         kvm_wait_for_ssh_timeout: "{{ wait_for_ssh_timeout }}"
         kvm_cloud_init_check_retries: "{{ cloud_init_check_retries }}"
         kvm_cloud_init_check_delay: "{{ cloud_init_check_delay }}"
+        kvm_image_dir: "{{ image_dir }}"
+        kvm_cloud_img_url: "{{ cloud_img_url }}"
+        kvm_cloud_img_base_name: "{{ cloud_img_base_name }}"
+        kvm_force_recreate: false
+        kvm_skip_cloud_init_wait: false
 
   post_tasks:
     - name: Display operation summary
-      debug:
+      ansible.builtin.debug:
         msg: |
           ✅ VM Lifecycle Management Complete!
           🎯 State: {{ vm_lifecycle_state }}

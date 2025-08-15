@@ -3,7 +3,7 @@
 # Project Setup Script
 # ============================================================================
 # This script sets up the Ansible project environment
-# 
+#
 # Usage: ./scripts/setup.sh
 # ============================================================================
 

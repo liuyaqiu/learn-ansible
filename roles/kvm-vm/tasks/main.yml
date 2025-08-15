@@ -1,26 +1,25 @@
----
 # ============================================================================
 # KVM VM Role - Main Tasks
 # ============================================================================
 
 - name: Include OS-specific variables
-  include_vars: "{{ ansible_os_family }}.yml"
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
   failed_when: false
 
 - name: Validate role parameters
-  include_tasks: validate.yml
+  ansible.builtin.include_tasks: validate.yml
   tags: [always, validate]
 
 - name: Setup KVM/Libvirt environment
-  include_tasks: setup-kvm.yml
+  ansible.builtin.include_tasks: setup-kvm.yml
   when: kvm_vm_state != 'absent'
   tags: [setup, kvm]
 
 - name: Manage VM lifecycle
-  include_tasks: "{{ kvm_vm_state }}.yml"
+  ansible.builtin.include_tasks: "{{ kvm_vm_state }}.yml"
   tags: [vm-lifecycle]
 
 - name: Display VM information
-  include_tasks: info.yml
+  ansible.builtin.include_tasks: info.yml
   when: kvm_vm_state in ['present', 'running']
   tags: [info]

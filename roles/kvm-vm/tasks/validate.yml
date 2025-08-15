@@ -1,10 +1,9 @@
----
 # ============================================================================
 # KVM VM Role - Validation Tasks
 # ============================================================================
 
 - name: Validate required variables are defined
-  assert:
+  ansible.builtin.assert:
     that:
       - kvm_vm_name is defined and kvm_vm_name | length > 0
       - kvm_vm_memory is defined and kvm_vm_memory | int > 0
@@ -18,7 +17,7 @@
     success_msg: "✅ All required KVM VM variables are properly defined"
 
 - name: Validate VM resource constraints
-  assert:
+  ansible.builtin.assert:
     that:
       - kvm_vm_memory | int >= 512
       - kvm_vm_memory | int <= 32768
@@ -30,17 +29,17 @@
     success_msg: "✅ VM resource specifications are within acceptable ranges"
 
 - name: Check if SSH public key file exists
-  stat:
+  ansible.builtin.stat:
     path: "{{ kvm_ssh_key_path }}"
   register: _kvm_ssh_pub_key_stat
 
 - name: Check if SSH private key file exists
-  stat:
+  ansible.builtin.stat:
     path: "{{ kvm_ssh_private_key_path }}"
   register: _kvm_ssh_private_key_stat
 
 - name: Validate SSH public key accessibility
-  assert:
+  ansible.builtin.assert:
     that:
       - _kvm_ssh_pub_key_stat.stat.exists
       - _kvm_ssh_pub_key_stat.stat.isreg
@@ -48,7 +47,7 @@
     success_msg: "✅ SSH public key file exists and is accessible"
 
 - name: Validate SSH private key accessibility
-  assert:
+  ansible.builtin.assert:
     that:
       - _kvm_ssh_private_key_stat.stat.exists
       - _kvm_ssh_private_key_stat.stat.isreg
@@ -56,7 +55,7 @@
     success_msg: "✅ SSH private key file exists and is accessible"
 
 - name: Validate VM state parameter
-  assert:
+  ansible.builtin.assert:
     that:
       - kvm_vm_state in ['present', 'absent', 'running', 'stopped']
     fail_msg: "❌ Invalid VM state: {{ kvm_vm_state }}. Must be one of: present, absent, running, stopped"

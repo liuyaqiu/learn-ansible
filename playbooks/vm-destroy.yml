@@ -1,9 +1,8 @@
----
 # ============================================================================
 # VM Destruction Playbook - Focused on removing VMs
 # ============================================================================
 # This playbook specifically handles VM cleanup and removal
-# 
+#
 # Usage:
 #   ansible-playbook -i inventories/dev playbooks/vm-destroy.yml
 # ============================================================================
@@ -11,8 +10,8 @@
 - name: Destroy and Clean Up KVM Virtual Machine
   hosts: localhost
   connection: local
-  become: yes
-  gather_facts: yes
+  become: true
+  gather_facts: true
 
   vars:
     # Force VM state to absent for this playbook
@@ -20,14 +19,14 @@
 
   pre_tasks:
     - name: Display destruction warning
-      debug:
+      ansible.builtin.debug:
         msg: |
           ⚠️  VM DESTRUCTION WARNING ⚠️
-          
+
           🎯 Target VM: {{ vm_name }}
           📍 Environment: {{ group_names | default(['default']) | join(', ') }}
           🗑️  Action: Complete removal of VM and associated files
-          
+
           This operation will:
           - Stop and destroy the VM if running
           - Remove VM definition from libvirt
@@ -35,12 +34,12 @@
           - Preserve the base cloud image for reuse
 
     - name: Safety pause for confirmation
-      pause:
+      ansible.builtin.pause:
         prompt: |
           ⚠️  WARNING: About to destroy VM '{{ vm_name }}'!
-          
+
           This action cannot be undone. All VM data will be lost.
-          
+
           Press Enter to continue or Ctrl+C to abort.
       when: confirm_cleanup | default(true)
 
@@ -49,22 +48,32 @@
       vars:
         kvm_vm_state: "{{ vm_lifecycle_state }}"
         kvm_vm_name: "{{ vm_name }}"
+        kvm_vm_memory: "{{ vm_memory }}"
+        kvm_vm_vcpus: "{{ vm_vcpus }}"
+        kvm_vm_disk_size: "{{ vm_disk_size }}"
+        kvm_vm_static_ip: "{{ vm_static_ip }}"
+        kvm_ssh_key_path: "{{ ssh_key_path }}"
+        kvm_ssh_private_key_path: "{{ ssh_private_key_path }}"
+        kvm_cloud_init_user: "{{ cloud_init_user }}"
+        kvm_cloud_init_password: "{{ cloud_init_password }}"
         kvm_confirm_cleanup: "{{ confirm_cleanup | default(false) }}"
+        kvm_image_dir: "{{ image_dir }}"
+        kvm_cloud_img_base_name: "{{ cloud_img_base_name }}"
 
   post_tasks:
     - name: Verify VM removal
-      command: virsh list --all --name
+      ansible.builtin.command: virsh list --all --name
       register: remaining_vms
       changed_when: false
-      become: yes
+      become: true
 
     - name: Display destruction summary
-      debug:
+      ansible.builtin.debug:
         msg: |
           ✅ VM Destruction Complete!
           🗑️  VM '{{ vm_name }}' has been removed
-          📊 Remaining VMs: {{ remaining_vms.stdout_lines | length }}
-          
+          📊 Remaining VMs: {{ (remaining_vms.stdout_lines | default([])) | length }}
+
           🔄 Next Steps:
           - Use vm-create.yml to recreate if needed
           - Base cloud image preserved for future use

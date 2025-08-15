@@ -3,15 +3,15 @@
 # Development Environment Configuration
 # ============================================================================
 # This file overrides settings in all.yml for development/testing
-# 
+#
 # Usage: ansible-playbook -i inventory/dev create.yaml
 # ============================================================================
 
 # Development VM settings - smaller resources for testing
 vm_name: dev-vm
-vm_memory: 1024      # Reduced memory for dev
+vm_memory: 1024 # Reduced memory for dev
 vm_vcpus: 1
-vm_disk_size: 10     # Smaller disk for dev
+vm_disk_size: 10 # Smaller disk for dev
 
 # Different IP range for development
 vm_static_ip: 192.168.122.110

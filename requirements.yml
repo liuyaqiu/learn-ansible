@@ -3,7 +3,7 @@
 # Ansible Requirements File
 # ============================================================================
 # This file specifies external collections and roles required by the project
-# 
+#
 # Install with: ansible-galaxy install -r requirements.yml
 # ============================================================================
 
@@ -11,16 +11,16 @@ collections:
   # Core Ansible collections
   - name: ansible.posix
     version: ">=1.5.0"
-  
+
   # Community collections with version pinning to avoid conflicts
   - name: community.general
     version: ">=8.0.0,<12.0.0"
-  
+
   # Libvirt management collection
   - name: community.libvirt
     version: ">=1.2.0"
-  
-  # Cloud management collections  
+
+  # Cloud management collections
   - name: community.crypto
     version: ">=2.8.0"
 

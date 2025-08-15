@@ -1,0 +1,37 @@
+# Prettier ignore file
+# =====================
+
+# Version control
+.git/
+.gitignore
+
+# Dependencies
+node_modules/
+.cache/
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Ansible specific
+*.retry
+.ansible/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Specific files that shouldn't be formatted
+.gitlab-ci.yml
+.github/workflows/*.yml

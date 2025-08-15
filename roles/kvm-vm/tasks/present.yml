@@ -1,26 +1,25 @@
----
 # ============================================================================
 # KVM VM Role - Create/Ensure VM Present
 # ============================================================================
 
 - name: Download Ubuntu cloud image if not present
-  get_url:
+  ansible.builtin.get_url:
     url: "{{ kvm_cloud_img_url }}"
     dest: "{{ _kvm_cloud_img_path }}"
-    mode: '0644'
-    force: no
-  become: yes
+    mode: "0644"
+    force: false
+  become: true
 
 - name: Ensure cloud image has correct permissions
-  file:
+  ansible.builtin.file:
     path: "{{ _kvm_cloud_img_path }}"
     owner: root
     group: root
-    mode: '0644'
-  become: yes
+    mode: "0644"
+  become: true
 
 - name: Create qcow2 overlay disk for the VM
-  command: >
+  ansible.builtin.command: >
     qemu-img create
     -f qcow2
     -F qcow2
@@ -29,51 +28,51 @@
     {{ kvm_vm_disk_size }}G
   args:
     creates: "{{ _kvm_vm_disk_path }}"
-  become: yes
+  become: true
 
 - name: Ensure overlay disk has correct permissions
-  file:
+  ansible.builtin.file:
     path: "{{ _kvm_vm_disk_path }}"
     owner: libvirt-qemu
     group: kvm
-    mode: '0640'
-  become: yes
+    mode: "0640"
+  become: true
 
 - name: Remove existing cloud-init files to force regeneration
-  file:
+  ansible.builtin.file:
     path: "{{ item }}"
     state: absent
   loop:
     - "{{ _kvm_user_data_path }}"
     - "{{ _kvm_meta_data_path }}"
     - "{{ _kvm_seed_img_path }}"
-  become: yes
+  become: true
 
 - name: Generate cloud-init configuration files
-  template:
+  ansible.builtin.template:
     src: "{{ item.src }}"
     dest: "{{ item.dest }}"
-    mode: '0644'
+    mode: "0644"
   loop:
-    - { src: 'user-data.j2', dest: "{{ _kvm_user_data_path }}" }
-    - { src: 'network-config.j2', dest: "{{ _kvm_network_config_path }}" }
-    - { src: 'meta-data.j2', dest: "{{ _kvm_meta_data_path }}" }
-  become: yes
+    - { src: "user-data.j2", dest: "{{ _kvm_user_data_path }}" }
+    - { src: "network-config.j2", dest: "{{ _kvm_network_config_path }}" }
+    - { src: "meta-data.j2", dest: "{{ _kvm_meta_data_path }}" }
+  become: true
 
 - name: Generate seed.img (cloud-init ISO) from user-data and meta-data
-  command: >
+  ansible.builtin.command: >
     cloud-localds -N {{ _kvm_network_config_path }} {{ _kvm_seed_img_path }} {{ _kvm_user_data_path }} {{ _kvm_meta_data_path }}
   args:
     creates: "{{ _kvm_seed_img_path }}"
-  become: yes
+  become: true
 
 - name: Ensure seed image has correct permissions
-  file:
+  ansible.builtin.file:
     path: "{{ _kvm_seed_img_path }}"
     owner: libvirt-qemu
     group: kvm
-    mode: '0640'
-  become: yes
+    mode: "0640"
+  become: true
 
 - name: Check if VM already exists
   community.libvirt.virt:
@@ -81,10 +80,10 @@
     command: status
   register: _kvm_vm_status
   ignore_errors: true
-  become: yes
+  become: true
 
 - name: Create the KVM virtual machine using virt-install (if not exists)
-  command: >
+  ansible.builtin.command: >
     virt-install
     --name {{ kvm_vm_name }}
     --memory {{ kvm_vm_memory }}
@@ -97,10 +96,11 @@
     --noautoconsole
     --wait 0
   when: _kvm_vm_status is failed or kvm_force_recreate
-  become: yes
+  changed_when: true
+  become: true
 
 - name: Ensure VM is running
   community.libvirt.virt:
     name: "{{ kvm_vm_name }}"
     state: running
-  become: yes
+  become: true

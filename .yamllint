@@ -1,0 +1,59 @@
+# ============================================================================
+# YAML Lint Configuration
+# ============================================================================
+# Documentation: https://yamllint.readthedocs.io/
+# ============================================================================
+
+extends: default
+
+rules:
+  # Allow longer lines for Ansible playbooks
+  line-length:
+    max: 200
+    level: warning
+
+  # Be more flexible with indentation
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+
+  # Allow comments to have flexible spacing
+  comments-indentation: disable
+  comments:
+    min-spaces-from-content: 1
+
+  # Be flexible with brackets
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+  # Allow empty lines
+  empty-lines:
+    max: 3
+    max-start: 0
+    max-end: 1
+
+  # Allow truthy values (yes/no, on/off)
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no', 'on', 'off']
+    check-keys: false
+
+  # Allow document start
+  document-start:
+    present: false
+    
+  # Be more flexible with braces
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+    
+  # Required for ansible-lint compatibility
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
+
+# Ignore certain files
+ignore: |
+  .github/
+  .gitlab-ci.yml
+  molecule/

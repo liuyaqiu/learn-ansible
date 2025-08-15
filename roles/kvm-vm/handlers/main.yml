@@ -1,28 +1,27 @@
----
 # ============================================================================
 # KVM VM Role - Handlers
 # ============================================================================
 
 - name: restart libvirtd
-  service:
+  ansible.builtin.service:
     name: libvirtd
     state: restarted
-  become: yes
+  become: true
 
 - name: start libvirt default network
   community.libvirt.virt_net:
     name: default
     state: active
-  become: yes
+  become: true
 
 - name: stop vm
   community.libvirt.virt:
     name: "{{ kvm_vm_name }}"
     state: destroyed
-  become: yes
+  become: true
 
 - name: start vm
   community.libvirt.virt:
     name: "{{ kvm_vm_name }}"
     state: running
-  become: yes
+  become: true

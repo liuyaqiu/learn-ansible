@@ -13,7 +13,7 @@ exclude_paths:
   - .pre-commit-config.yaml
 
 # Enable offline mode (don't check for updates)
-offline: false
+offline: true
 
 # Use default rules
 use_default_rules: true

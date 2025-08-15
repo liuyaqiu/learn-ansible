@@ -206,6 +206,107 @@
 
 ---
 
+## 🛠️ **Common CI Issues & Solutions**
+
+### **❌ GitHub Actions Schema Validation Failures**
+
+#### **Issue**: `schema[meta]: $.galaxy_info.platforms[0].versions[0] 'focal' is not one of...`
+
+- **Cause**: Invalid Ubuntu version format in `roles/*/meta/main.yml`
+- **Solution**: Use `all` instead of specific version names
+
+```yaml
+# ❌ INVALID
+platforms:
+  - name: Ubuntu
+    versions:
+      - focal
+      - jammy
+
+# ✅ VALID
+platforms:
+  - name: Ubuntu
+    versions:
+      - all
+```
+
+#### **Issue**: `no-changed-when` rule violations
+
+- **Cause**: Missing `changed_when` in command/shell tasks
+- **Solution**: Add explicit change conditions
+
+```yaml
+# ✅ FIXED
+- name: Create VM
+  ansible.builtin.command: virt-install ...
+  changed_when: true
+```
+
+#### **Issue**: `CodeQL Action v2 deprecated` & `Resource not accessible by integration`
+
+- **Cause**: Outdated CodeQL action version and missing permissions
+- **Solution**: Update to v3 and add proper permissions
+
+```yaml
+# ✅ FIXED
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+- name: Upload SARIF
+  uses: github/codeql-action/upload-sarif@v3  # Updated from v2
+```
+
+#### **Issue**: `actions/upload-artifact: v3` deprecated
+
+- **Cause**: Using deprecated v3 artifact actions
+- **Solution**: Update to v4
+
+```yaml
+# ❌ DEPRECATED
+- uses: actions/upload-artifact@v3
+
+# ✅ CURRENT
+- uses: actions/upload-artifact@v4
+- uses: actions/cache@v4 # Also updated
+```
+
+#### **Issue**: `log file at /logs/ansible.log is not writeable` & `Failed to find the collection dir deps`
+
+- **Cause**: Missing logs directory and collection installation issues
+- **Solution**: Create logs directory and fix collection installation
+
+```yaml
+# ✅ FIXED in GitHub Actions
+- name: Install Ansible collections
+  run: |
+    mkdir -p logs  # Create logs directory
+    ansible-galaxy collection install -r requirements.yml --force
+
+# ✅ FIXED in ansible.cfg
+# log_path = logs/ansible.log  # Commented out for CI
+
+# ✅ FIXED in .ansible-lint
+offline: true  # Skip dependency resolution
+```
+
+### **✅ Recent Fixes Applied**
+
+- **Schema validation**: Fixed Ubuntu platform versions in meta files
+- **Security scanning**: Eliminated false positives for Ansible variables
+- **FQCN compliance**: Auto-converted 54 module references
+- **Change tracking**: Added proper `changed_when` declarations
+- **GitHub Actions security**: Updated CodeQL to v3, added proper permissions
+- **Trivy integration**: Enhanced with JSON output and artifact uploads
+- **Action versions**: Updated upload-artifact and cache actions to v4
+- **Collection installation**: Fixed ansible-galaxy collection install issues
+- **Logging configuration**: Disabled problematic log paths for CI environments
+- **Ansible-lint offline mode**: Enabled to prevent dependency resolution conflicts
+- **Environment variables**: Added ANSIBLE_LINT_NODEPS=1 for CI compatibility
+
+---
+
 ## 🎯 **Next Steps & Recommendations**
 
 ### **🔄 Continuous Improvement**

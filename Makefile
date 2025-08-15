@@ -37,8 +37,10 @@ help: ## Show this help message
 .PHONY: install-deps
 install-deps: ## Install development dependencies
 	@echo "$(GREEN)Installing development dependencies...$(NC)"
+	@mkdir -p logs
 	pip3 install --user ansible-lint yamllint pre-commit
 	npm install -g prettier
+	ansible-galaxy collection install -r requirements.yml --force
 	@echo "$(GREEN)✅ Dependencies installed$(NC)"
 
 .PHONY: check-deps
@@ -121,7 +123,8 @@ yaml-lint: ## Run YAML linting
 ansible-lint: ## Run ansible-lint if available
 	@echo "$(GREEN)Running Ansible lint checks...$(NC)"
 	@if command -v ansible-lint >/dev/null 2>&1; then \
-		ansible-lint $(PLAYBOOK_DIR)/ $(ROLE_DIR)/ || exit 1; \
+		rm -rf ~/.cache/ansible-compat/ 2>/dev/null || true; \
+		ANSIBLE_LINT_NODEPS=1 ANSIBLE_COLLECTIONS_PATH=~/.ansible/collections:/usr/share/ansible/collections ansible-lint --offline $(PLAYBOOK_DIR)/ $(ROLE_DIR)/ || exit 1; \
 		echo "$(GREEN)✅ Ansible lint passed$(NC)"; \
 	else \
 		echo "$(YELLOW)⚠️  ansible-lint not available (run 'make install-deps')$(NC)"; \
